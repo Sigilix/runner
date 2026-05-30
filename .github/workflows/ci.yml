@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint workflows (actionlint + YAML validity)
+        run: |
+          set -euo pipefail
+          # Validate every workflow file parses as YAML, then run actionlint
+          # (pinned release) for GitHub Actions-specific checks. Self-contained;
+          # no third-party action with an unpinned ref.
+          python3 - <<'PY'
+          import glob, sys
+          try:
+              import yaml
+          except ImportError:
+              import subprocess
+              subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "pyyaml"])
+              import yaml
+          files = glob.glob(".github/workflows/*.yml") + glob.glob(".github/workflows/*.yaml")
+          for f in files:
+              with open(f) as fh:
+                  yaml.safe_load(fh)
+              print("yaml ok:", f)
+          if not files:
+              print("no workflow files")
+          PY
+          ACTIONLINT_VERSION=1.7.7
+          curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            | tar -xz actionlint
+          ./actionlint -color
