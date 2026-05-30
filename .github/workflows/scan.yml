@@ -1,0 +1,121 @@
+name: Sigilix Runner — deterministic scan
+
+# Reusable workflow. A caller invokes it (pin to a commit SHA):
+#
+#   jobs:
+#     scan:
+#       uses: sigilix/runner/.github/workflows/scan.yml@<commit-sha>
+#       permissions:
+#         contents: read
+#         id-token: write
+#       with:
+#         ingest-url: https://<sigilix-worker>/runner/ingest
+#         oidc-audience: <Sigilix's configured ingest audience>
+#
+# It runs deterministic tools on the caller's checked-out code, normalizes the
+# output to SARIF, mints a GitHub Actions OIDC token, and POSTs the SARIF + token
+# to Sigilix. The source never leaves CI except as normalized SARIF findings.
+
+on:
+  workflow_call:
+    inputs:
+      ingest-url:
+        description: "Sigilix ingest endpoint (the worker's POST /runner/ingest)."
+        required: true
+        type: string
+      oidc-audience:
+        description: "OIDC token audience; must equal Sigilix's configured ingest audience."
+        required: true
+        type: string
+      semgrep-config:
+        description: "Semgrep ruleset passed to `semgrep --config` (default: auto)."
+        required: false
+        default: "auto"
+        type: string
+
+permissions:
+  contents: read # read the checked-out source
+  id-token: write # mint the OIDC receipt — the ONLY elevated permission
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (PR head)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          # On pull_request the default checkout is the MERGE ref; scan the PR
+          # HEAD so findings + the reported headSha line up with what Sigilix
+          # reviews. head.sha is a commit SHA (not the branch name) → not
+          # injectable. For non-PR events github.sha already is the right commit.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Run Semgrep → SARIF
+        env:
+          SEMGREP_CONFIG: ${{ inputs.semgrep-config }}
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet semgrep
+          # A non-zero exit on findings must NOT fail the caller's CI — the receipt
+          # is best-effort evidence, not a merge gate.
+          semgrep scan --config "$SEMGREP_CONFIG" --sarif --output sarif.json --quiet || true
+          # Guarantee a well-formed SARIF doc even if semgrep produced none.
+          if [ ! -s sarif.json ]; then printf '{"version":"2.1.0","runs":[]}' > sarif.json; fi
+
+      - name: Mint OIDC receipt + POST to Sigilix
+        env:
+          INGEST_URL: ${{ inputs.ingest-url }}
+          AUDIENCE: ${{ inputs.oidc-audience }}
+          REPOSITORY: ${{ github.repository }}
+          REPOSITORY_ID: ${{ github.repository_id }}
+          OIDC_SHA: ${{ github.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          # Best-effort: if no OIDC token can be minted (e.g. a forked-PR run where
+          # id-token isn't granted), skip silently — Sigilix treats an absent
+          # receipt as evidence-pending, never a failure.
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] || [ -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
+            echo "::notice::OIDC token unavailable (no id-token permission?) — skipping Sigilix receipt."
+            exit 0
+          fi
+          # Non-fatal: any failure (network / HTTP / bad payload) must NOT fail the
+          # caller's CI — under `set -e` an unguarded pipeline would. Time-bound it
+          # so a slow/down token endpoint can't hang the job to the runner timeout.
+          TOKEN=$(curl -fsS --connect-timeout 10 --max-time 30 \
+            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUDIENCE}" \
+            | python3 -c "import sys, json; print(json.load(sys.stdin)['value'])") || {
+            echo "::notice::OIDC token mint failed — skipping Sigilix receipt (non-fatal)."
+            exit 0
+          }
+          echo "::add-mask::$TOKEN"
+          # Build the envelope with Python so file contents are JSON-encoded, never
+          # shell-interpolated. `sha` is the OIDC-bound value (provenance); `headSha`
+          # is the PR head (Sigilix's review-join key).
+          python3 - > envelope.json <<'PY'
+          import json, os
+          env = {
+              "sarif": open("sarif.json").read(),
+              "repository": os.environ["REPOSITORY"],
+              "repositoryId": os.environ["REPOSITORY_ID"],
+              "sha": os.environ["OIDC_SHA"],
+              "headSha": os.environ["HEAD_SHA"],
+          }
+          pr = os.environ.get("PR_NUMBER", "")
+          if pr.isdigit():
+              env["prNumber"] = int(pr)
+          json.dump(env, open("envelope.json", "w"))
+          PY
+          # Time-bounded + non-fatal (the `|| true` keeps a failed POST from
+          # failing the caller's CI — the receipt is best-effort evidence).
+          code=$(curl -sS --connect-timeout 10 --max-time 60 -o /tmp/sigilix-resp -w '%{http_code}' -X POST "$INGEST_URL" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "content-type: application/json" \
+            --data-binary @envelope.json) || true
+          case "$code" in
+            2*) echo "::notice::Sigilix receipt accepted ($code)." ;;
+            *) echo "::warning::Sigilix ingest returned ${code:-no-response} (non-fatal)." ;;
+          esac
