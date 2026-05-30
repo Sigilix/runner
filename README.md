@@ -3,17 +3,17 @@
 The reusable GitHub Actions workflow that powers [Sigilix](https://github.com/Sigilix)'s
 deterministic-tool review lane and its self-hosted / private-code deployments.
 
-> **Status:** active development. The reusable workflow (`.github/workflows/scan.yml`) is
-> being finalized; this repo is the pinned, auditable home it will live in.
+> **Status:** live. `.github/workflows/scan.yml` is in production use (Sigilix dogfoods it on
+> its own PRs). This public repo is its pinned, auditable home — pin your caller to a commit SHA.
 
 ## What it is
 
 Sigilix's reviewer runs as a Cloudflare Worker, which cannot execute subprocesses. This repo
-holds the **reusable workflow** that runs the deterministic tools (Semgrep/OpenGrep, ESLint,
-Ruff, actionlint, ShellCheck) **inside your own CI**, normalizes their output to SARIF, and
-posts it back to Sigilix with a **GitHub-signed OIDC receipt** — so Sigilix can ground its
-review in real tool output, with cryptographic proof of *where* and *what* ran. **Your source
-never leaves your infrastructure.**
+holds the **reusable workflow** that runs deterministic static-analysis tools (Semgrep today;
+ESLint, Ruff, actionlint, ShellCheck on the roadmap) **inside your own CI**, normalizes their
+output to SARIF, and posts it back to Sigilix with a **GitHub-signed OIDC receipt** — so Sigilix
+can ground its review in real tool output, with cryptographic proof of *where* and *what* ran.
+**Your source never leaves your infrastructure.**
 
 ## How to use
 
@@ -23,16 +23,28 @@ Add a workflow to your repository that calls the pinned reusable workflow:
 # .github/workflows/sigilix.yml
 name: Sigilix
 on: [pull_request]
+
+# Restrictive workflow-level default; the id-token:write grant is scoped to the job below
+# (so no other/future job in this workflow can mint a token).
 permissions:
   contents: read
-  id-token: write          # lets the runner mint its OIDC receipt
+
 jobs:
   scan:
-    uses: sigilix/runner/.github/workflows/scan.yml@<commit-sha>   # PIN to a SHA
+    permissions:
+      contents: read
+      id-token: write          # the ONLY elevated grant — to mint the OIDC receipt
+    uses: Sigilix/runner/.github/workflows/scan.yml@<commit-sha>   # PIN to a SHA
+    with:
+      ingest-url: https://sigilix.dan-martinezjulio.workers.dev/runner/ingest
+      oidc-audience: sigilix-runner-ingest
+      semgrep-config: p/security-audit   # optional; defaults to "auto" (broader, noisier)
 ```
 
-**Pin to a commit SHA** (not a branch or tag): the receipt attests the exact tool version only
-when you pin, and a moving ref cannot prove which version of the runner ran.
+`ingest-url` + `oidc-audience` are Sigilix's configured ingest endpoint and token audience
+(the values above); the worker rejects any token whose `aud` doesn't match. **Pin to a commit
+SHA** (not a branch or tag): the receipt attests the exact tool version only when you pin, and
+a moving ref cannot prove which version of the runner ran.
 
 ## Security model
 
