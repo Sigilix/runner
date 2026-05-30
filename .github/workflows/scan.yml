@@ -81,9 +81,16 @@ jobs:
             echo "::notice::OIDC token unavailable (no id-token permission?) — skipping Sigilix receipt."
             exit 0
           fi
-          TOKEN=$(curl -fsS -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+          # Non-fatal: any failure (network / HTTP / bad payload) must NOT fail the
+          # caller's CI — under `set -e` an unguarded pipeline would. Time-bound it
+          # so a slow/down token endpoint can't hang the job to the runner timeout.
+          TOKEN=$(curl -fsS --connect-timeout 10 --max-time 30 \
+            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
             "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUDIENCE}" \
-            | python3 -c "import sys, json; print(json.load(sys.stdin)['value'])")
+            | python3 -c "import sys, json; print(json.load(sys.stdin)['value'])") || {
+            echo "::notice::OIDC token mint failed — skipping Sigilix receipt (non-fatal)."
+            exit 0
+          }
           echo "::add-mask::$TOKEN"
           # Build the envelope with Python so file contents are JSON-encoded, never
           # shell-interpolated. `sha` is the OIDC-bound value (provenance); `headSha`
@@ -102,7 +109,9 @@ jobs:
               env["prNumber"] = int(pr)
           json.dump(env, open("envelope.json", "w"))
           PY
-          code=$(curl -sS -o /tmp/sigilix-resp -w '%{http_code}' -X POST "$INGEST_URL" \
+          # Time-bounded + non-fatal (the `|| true` keeps a failed POST from
+          # failing the caller's CI — the receipt is best-effort evidence).
+          code=$(curl -sS --connect-timeout 10 --max-time 60 -o /tmp/sigilix-resp -w '%{http_code}' -X POST "$INGEST_URL" \
             -H "Authorization: Bearer $TOKEN" \
             -H "content-type: application/json" \
             --data-binary @envelope.json) || true
