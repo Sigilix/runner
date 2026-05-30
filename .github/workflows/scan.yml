@@ -41,14 +41,17 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout (PR head)
+      - name: Checkout (merge ref for PRs)
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          # On pull_request the default checkout is the MERGE ref; scan the PR
-          # HEAD so findings + the reported headSha line up with what Sigilix
-          # reviews. head.sha is a commit SHA (not the branch name) → not
-          # injectable. For non-PR events github.sha already is the right commit.
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          # Use the DEFAULT checkout — no `ref:` override. On a pull_request event
+          # that is `refs/pull/N/merge` (the test-merge commit), whose tip equals
+          # `github.sha`; on push it is `github.sha` directly. That alignment is
+          # load-bearing: the OIDC token's `sha` claim is `github.sha`, so the
+          # scanned tree == the signed commit, and Sigilix can bind the receipt by
+          # requiring `claims.sha` == the PR's `merge_commit_sha` (CR-4). Scanning
+          # the PR head instead would make the SARIF's revisionId disagree with the
+          # bound merge sha and demote the evidence.
           persist-credentials: false
 
       - name: Run Semgrep → SARIF
@@ -70,8 +73,6 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           REPOSITORY_ID: ${{ github.repository_id }}
           OIDC_SHA: ${{ github.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
           # Best-effort: if no OIDC token can be minted (e.g. a forked-PR run where
@@ -93,8 +94,13 @@ jobs:
           }
           echo "::add-mask::$TOKEN"
           # Build the envelope with Python so file contents are JSON-encoded, never
-          # shell-interpolated. `sha` is the OIDC-bound value (provenance); `headSha`
-          # is the PR head (Sigilix's review-join key).
+          # shell-interpolated. The envelope carries ONLY the SARIF + the values the
+          # worker binds against the OIDC claims (`repository`/`repositoryId`/`sha`).
+          # It deliberately does NOT send a PR number or head sha: Sigilix derives
+          # the review-join PR number from the SIGNED `claims.ref` and the commit
+          # from `claims.sha`, so no request-body field can influence which PR a
+          # receipt joins (CR-4). `sha` here == `github.sha` == the merge commit on
+          # a pull_request, which the worker checks against the PR's merge_commit_sha.
           python3 - > envelope.json <<'PY'
           import json, os
           env = {
@@ -102,11 +108,7 @@ jobs:
               "repository": os.environ["REPOSITORY"],
               "repositoryId": os.environ["REPOSITORY_ID"],
               "sha": os.environ["OIDC_SHA"],
-              "headSha": os.environ["HEAD_SHA"],
           }
-          pr = os.environ.get("PR_NUMBER", "")
-          if pr.isdigit():
-              env["prNumber"] = int(pr)
           json.dump(env, open("envelope.json", "w"))
           PY
           # Time-bounded + non-fatal (the `|| true` keeps a failed POST from
