@@ -32,6 +32,11 @@ on:
         required: false
         default: "auto"
         type: string
+      gitleaks:
+        description: "Also run gitleaks (secret-leak proof) and merge its SARIF (default: true)."
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: read # read the checked-out source
@@ -65,6 +70,60 @@ jobs:
           semgrep scan --config "$SEMGREP_CONFIG" --sarif --output sarif.json --quiet || true
           # Guarantee a well-formed SARIF doc even if semgrep produced none.
           if [ ! -s sarif.json ]; then printf '{"version":"2.1.0","runs":[]}' > sarif.json; fi
+
+      - name: Run gitleaks → merge SARIF (secret-leak proof)
+        if: ${{ inputs.gitleaks }}
+        env:
+          GITLEAKS_VERSION: "8.21.2"
+        run: |
+          set -euo pipefail
+          # Pinned release binary (no third-party action / unpinned ref). UNLIKE
+          # ci.yml (Sigilix's OWN CI, where a hard fail is fine), this runs in the
+          # CALLER's CI under a best-effort contract — a download failure (404 /
+          # rate-limit / network) must NOT fail their job, so degrade to "gitleaks
+          # unavailable, keep the semgrep SARIF" via exit 0 (sarif.json already
+          # holds the well-formed semgrep doc from the prior step).
+          if ! curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz gitleaks; then
+            echo "::warning::gitleaks download failed — skipping (semgrep SARIF unchanged)."
+            exit 0
+          fi
+          # `dir` scans the checked-out merge-tree FILES (not git history), so a
+          # finding aligns with the scanned revision (the OIDC `sha`), same as
+          # semgrep. `--exit-code 0` + `|| true`: a leak must NOT fail the caller's
+          # CI — the receipt is best-effort evidence, not a merge gate.
+          ./gitleaks dir . --report-format sarif --report-path gitleaks.sarif --exit-code 0 --no-banner || true
+          if [ ! -s gitleaks.sarif ]; then printf '{"version":"2.1.0","runs":[]}' > gitleaks.sarif; fi
+          # Merge gitleaks' runs into the semgrep SARIF — one envelope = one SARIF
+          # doc, and SARIF allows multiple `runs` (one per tool). Size-guard the
+          # worker's 8 MiB ingest cap (SIG-184 413): if combined exceeds it, keep
+          # semgrep only (the established lane wins) and notice the drop.
+          # `|| true`: the merge must NOT fail the caller's CI — on any python error
+          # (ENOSPC on the write, missing interpreter, pathological input) sarif.json
+          # is left as the semgrep-only doc from the prior step (the degraded state).
+          python3 - <<'PY' || true
+          import json
+          CAP = 7_800_000  # bytes — under the worker's REPORT_SIZE_CAP_BYTES (8 MiB)
+          def load(p):
+              try:
+                  with open(p) as f:
+                      d = json.load(f)
+                  return d if isinstance(d, dict) else {"version": "2.1.0", "runs": []}
+              except Exception:
+                  return {"version": "2.1.0", "runs": []}
+          base = load("sarif.json")
+          extra = load("gitleaks.sarif")
+          base_runs = base.get("runs") or []
+          extra_runs = extra.get("runs") or []
+          merged = dict(base)
+          merged["runs"] = base_runs + extra_runs
+          out = json.dumps(merged)
+          if len(out.encode("utf-8")) > CAP:
+              print("::warning::combined SARIF over ingest cap — keeping semgrep only")
+              base["runs"] = base_runs
+              out = json.dumps(base)
+          with open("sarif.json", "w") as f:
+              f.write(out)
+          PY
 
       - name: Mint OIDC receipt + POST to Sigilix
         env:
