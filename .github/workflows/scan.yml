@@ -37,6 +37,11 @@ on:
         required: false
         default: true
         type: boolean
+      osv-scanner:
+        description: "Also run osv-scanner (dependency-vuln proof) and merge its SARIF (default: true)."
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: read # read the checked-out source
@@ -119,6 +124,59 @@ jobs:
           out = json.dumps(merged)
           if len(out.encode("utf-8")) > CAP:
               print("::warning::combined SARIF over ingest cap — keeping semgrep only")
+              base["runs"] = base_runs
+              out = json.dumps(base)
+          with open("sarif.json", "w") as f:
+              f.write(out)
+          PY
+
+      - name: Run osv-scanner → merge SARIF (dependency-vuln proof)
+        if: ${{ inputs.osv-scanner }}
+        env:
+          OSV_SCANNER_VERSION: "2.3.8"
+        run: |
+          set -euo pipefail
+          # Pinned raw release binary (no third-party action / unpinned ref). Same
+          # best-effort contract as gitleaks: this runs in the CALLER's CI, so a
+          # download failure must NOT fail their job — degrade to the existing
+          # (semgrep[+gitleaks]) SARIF via exit 0 (sarif.json already holds it).
+          if ! curl -fsSL -o osv-scanner "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64"; then
+            echo "::warning::osv-scanner download failed — skipping (SARIF unchanged)."
+            exit 0
+          fi
+          chmod +x osv-scanner
+          # `scan source -r .` finds + scans dependency lockfiles in the checked-out
+          # merge tree (aligns findings with the OIDC `sha`). osv-scanner exits 1 when
+          # vulns are found and non-zero when there are no lockfiles to scan — NEITHER
+          # may fail the caller's CI, so `|| true`. `--output-file` writes the SARIF
+          # straight to a file (not stdout), so a progress/banner line can't corrupt
+          # it — matching the gitleaks `--report-path` pattern (diagnostics → stderr).
+          ./osv-scanner scan source -r --format sarif --output-file osv.sarif . || true
+          if [ ! -s osv.sarif ]; then printf '{"version":"2.1.0","runs":[]}' > osv.sarif; fi
+          # Merge osv-scanner's runs into the running SARIF (semgrep[+gitleaks]) — same
+          # one-doc-multiple-runs model, 8 MiB size-guard, and non-fatal `|| true` as
+          # the gitleaks step. Over-cap keeps the prior tools (the established lane
+          # wins). A malformed osv.sarif (e.g. a stray stdout banner) falls back to
+          # empty via load(), so the prior SARIF is preserved.
+          python3 - <<'PY' || true
+          import json
+          CAP = 7_800_000  # bytes — under the worker's REPORT_SIZE_CAP_BYTES (8 MiB)
+          def load(p):
+              try:
+                  with open(p) as f:
+                      d = json.load(f)
+                  return d if isinstance(d, dict) else {"version": "2.1.0", "runs": []}
+              except Exception:
+                  return {"version": "2.1.0", "runs": []}
+          base = load("sarif.json")
+          extra = load("osv.sarif")
+          base_runs = base.get("runs") or []
+          extra_runs = extra.get("runs") or []
+          merged = dict(base)
+          merged["runs"] = base_runs + extra_runs
+          out = json.dumps(merged)
+          if len(out.encode("utf-8")) > CAP:
+              print("::warning::combined SARIF over ingest cap — keeping prior tools only")
               base["runs"] = base_runs
               out = json.dumps(base)
           with open("sarif.json", "w") as f:
