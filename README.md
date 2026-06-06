@@ -9,8 +9,8 @@ deterministic-tool review lane and its self-hosted / private-code deployments.
 ## What it is
 
 Sigilix's reviewer runs as a Cloudflare Worker, which cannot execute subprocesses. This repo
-holds the **reusable workflow** that runs deterministic static-analysis tools (Semgrep today;
-ESLint, Ruff, actionlint, ShellCheck on the roadmap) **inside your own CI**, normalizes their
+holds the **reusable workflow** that runs deterministic static-analysis tools (Semgrep +
+gitleaks today; ESLint, Ruff, actionlint, ShellCheck on the roadmap) **inside your own CI**, normalizes their
 output to SARIF, and posts it back to Sigilix with a **GitHub-signed OIDC receipt** — so Sigilix
 can ground its review in real tool output, with cryptographic proof of *where* and *what* ran.
 **Your source never leaves your infrastructure.**
