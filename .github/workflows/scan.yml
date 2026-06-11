@@ -43,7 +43,7 @@ on:
         default: true
         type: boolean
       eslint-mode:
-        description: "ESLint mode: safe or repo-config."
+        description: "ESLint mode: safe or repo-config. repo-config executes caller ESLint config/plugins."
         required: false
         default: "safe"
         type: string
@@ -287,12 +287,15 @@ jobs:
             "$SARIF_DIR/osv.sarif" \
             -o "$SARIF_DIR/sarif.json" \
             --byte-cap "$SARIF_BYTE_CAP"
+          (cd "$SARIF_DIR" && sha256sum sarif.json > sarif.json.sha256)
 
       - name: Upload SARIF artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: sigilix-sarif
-          path: sarif/sarif.json
+          path: |
+            sarif/sarif.json
+            sarif/sarif.json.sha256
           if-no-files-found: error
           retention-days: 1
 
@@ -308,6 +311,12 @@ jobs:
         with:
           name: sigilix-sarif
           path: receipt
+
+      - name: Verify SARIF artifact integrity
+        run: |
+          set -euo pipefail
+          cd receipt
+          sha256sum -c sarif.json.sha256
 
       - name: Mint OIDC receipt and POST to Sigilix
         env:

@@ -62,16 +62,26 @@ def int_or_none(value):
 def normalize_path(path, base_dir="."):
     text = str(path or "")
     if os.path.isabs(text):
+        base_dir = os.path.realpath(base_dir)
+        text = os.path.realpath(text)
         try:
             relative = os.path.relpath(text, base_dir)
         except ValueError:
             relative = text
-        if not relative.startswith(".."):
+        if not _escapes_base(relative):
             text = relative
+        else:
+            text = os.path.basename(text)
     text = text.replace(os.sep, "/").replace("\\", "/")
     if text.startswith("./"):
-        return text[2:]
+        text = text[2:]
+    if text == "" or text == ".." or text.startswith("../"):
+        return os.path.basename(text) or "."
     return text
+
+
+def _escapes_base(relative):
+    return relative == ".." or relative.startswith(f"..{os.sep}") or os.path.isabs(relative)
 
 
 def load_json_file(path):

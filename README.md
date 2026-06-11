@@ -19,7 +19,7 @@ Current staged catalog:
 | Tool | Default | Notes |
 | --- | --- | --- |
 | Semgrep | on | Native SARIF with Sigilix metadata. `semgrep-config` defaults to `auto`. |
-| ESLint | on | Safe mode by default: no repository config or plugins. Use `eslint-mode: repo-config` to opt in to repository config. |
+| ESLint | on | Safe mode by default: no repository config or plugins. Use `eslint-mode: repo-config` only when you accept executing the caller repository's ESLint config/plugins in the scan job. |
 | Ruff | on | Native SARIF with Sigilix metadata. |
 | actionlint | on | Converts actionlint JSON to SARIF for GitHub Actions workflows. |
 | ShellCheck | on | Converts ShellCheck `json1` output to SARIF. |
@@ -70,7 +70,7 @@ Other useful inputs:
 | Input | Default | Meaning |
 | --- | --- | --- |
 | `semgrep-config` | `auto` | Ruleset passed to `semgrep --config`. |
-| `eslint-mode` | `safe` | `safe` avoids repository config/plugins; `repo-config` opts in to the caller's ESLint config. |
+| `eslint-mode` | `safe` | `safe` avoids repository config/plugins; `repo-config` opts in to the caller's ESLint config and plugins, which execute in the no-OIDC scan job. |
 | `result-cap` | `500` | Maximum kept findings per Sigilix-managed tool run. Dropped counts are stored in SARIF metadata. |
 | `sarif-byte-cap` | `7800000` | Maximum merged SARIF payload bytes before later runs are dropped. |
 

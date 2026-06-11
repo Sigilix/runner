@@ -13,6 +13,7 @@ from sigilix_sarif_contract import (
 from sigilix_sarif_merge import merge_sarif_documents
 from actionlint_to_sarif import convert_actionlint_json
 from eslint_to_sarif import convert_eslint_json
+from sarif_converter_common import normalize_path
 from shellcheck_to_sarif import convert_shellcheck_json
 
 
@@ -412,6 +413,12 @@ class ConverterTest(unittest.TestCase):
         self.assertEqual(result["locations"][0]["physicalLocation"]["artifactLocation"]["uri"], "scripts/build.sh")
         self.assert_sigilix_properties(legacy_document, "shellcheck")
         self.assertEqual(legacy_document["runs"][0]["results"][0]["level"], "note")
+
+    def test_normalize_path_falls_back_for_paths_outside_base_dir(self):
+        self.assertEqual(normalize_path("/repo/src/app.js", base_dir="/repo"), "src/app.js")
+        self.assertEqual(normalize_path("/etc/passwd", base_dir="/repo"), "passwd")
+        self.assertEqual(normalize_path("../secret.txt", base_dir="/repo"), "secret.txt")
+        self.assertEqual(normalize_path("", base_dir="/repo"), ".")
 
 
 if __name__ == "__main__":
