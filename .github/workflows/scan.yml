@@ -72,6 +72,36 @@ on:
         required: false
         default: true
         type: boolean
+      checkov:
+        description: "Run Checkov IaC scanning and merge its SARIF."
+        required: false
+        default: false
+        type: boolean
+      trivy:
+        description: "Run Trivy filesystem scanning and merge its SARIF."
+        required: false
+        default: false
+        type: boolean
+      trufflehog:
+        description: "Run TruffleHog filesystem secret scanning and merge its SARIF."
+        required: false
+        default: false
+        type: boolean
+      zizmor:
+        description: "Run zizmor on GitHub Actions workflows and merge its SARIF."
+        required: false
+        default: false
+        type: boolean
+      hadolint:
+        description: "Run Hadolint on Dockerfiles and merge its SARIF."
+        required: false
+        default: false
+        type: boolean
+      tflint:
+        description: "Run TFLint on Terraform files and merge its SARIF."
+        required: false
+        default: false
+        type: boolean
       result-cap:
         description: "Maximum findings kept per Sigilix-managed deterministic tool run."
         required: false
@@ -97,14 +127,20 @@ jobs:
       contents: read
     env:
       ACTIONLINT_VERSION: "1.7.12"
+      CHECKOV_VERSION: "3.3.1"
       ESLINT_VERSION: "10.4.1"
       GITLEAKS_VERSION: "8.21.2"
+      HADOLINT_VERSION: "2.14.0"
       OSV_SCANNER_VERSION: "2.3.8"
       RESULT_CAP: ${{ inputs.result-cap }}
       RUFF_VERSION: "0.15.17"
       SARIF_BYTE_CAP: ${{ inputs.sarif-byte-cap }}
       SEMGREP_VERSION: "1.166.0"
       SHELLCHECK_VERSION: "0.11.0"
+      TFLINT_VERSION: "0.63.1"
+      TRIVY_VERSION: "0.71.0"
+      TRUFFLEHOG_VERSION: "3.95.5"
+      ZIZMOR_VERSION: "1.25.2"
       SARIF_DIR: ${{ github.workspace }}/sarif
       SOURCE_DIR: ${{ github.workspace }}/source
       RUNNER_DIR: ${{ github.workspace }}/runner
@@ -279,6 +315,145 @@ jobs:
               osv-scanner "$raw" "$out" --cap "$RESULT_CAP" --ensure-run
           fi
 
+      - name: Run Checkov to SARIF
+        if: ${{ inputs.checkov }}
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          raw="$SARIF_DIR/checkov.raw.sarif"
+          out="$SARIF_DIR/checkov.sarif"
+          if ! python3 -m pip install --quiet "checkov==${CHECKOV_VERSION}"; then
+            echo "::warning::checkov install failed - manifest will record missing output."
+          else
+            checkov -d . -o sarif --quiet --compact --soft-fail --no-fail-on-crash --skip-download > "$raw" || true
+            if [ ! -s "$raw" ]; then printf '{"version":"2.1.0","runs":[]}' > "$raw"; fi
+            python3 "$RUNNER_DIR/.github/scripts/sigilix_sarif_contract.py" \
+              checkov "$raw" "$out" --cap "$RESULT_CAP" --ensure-run \
+              || echo "::warning::checkov SARIF normalization failed - manifest will record missing output."
+          fi
+
+      - name: Run Trivy to SARIF
+        if: ${{ inputs.trivy }}
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          raw="$SARIF_DIR/trivy.raw.sarif"
+          out="$SARIF_DIR/trivy.sarif"
+          if ! curl -fsSL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" \
+            | tar -xz -C "$RUNNER_TEMP" trivy; then
+            echo "::warning::trivy download failed - manifest will record missing output."
+          else
+            "$RUNNER_TEMP/trivy" fs --format sarif --output "$raw" --scanners vuln,secret,misconfig,license . || true
+            if [ ! -s "$raw" ]; then printf '{"version":"2.1.0","runs":[]}' > "$raw"; fi
+            python3 "$RUNNER_DIR/.github/scripts/sigilix_sarif_contract.py" \
+              trivy "$raw" "$out" --cap "$RESULT_CAP" --ensure-run \
+              || echo "::warning::trivy SARIF normalization failed - manifest will record missing output."
+          fi
+
+      - name: Run TruffleHog to SARIF
+        if: ${{ inputs.trufflehog }}
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          json="$SARIF_DIR/trufflehog.json"
+          out="$SARIF_DIR/trufflehog.sarif"
+          if ! curl -fsSL "https://github.com/trufflesecurity/trufflehog/releases/download/v${TRUFFLEHOG_VERSION}/trufflehog_${TRUFFLEHOG_VERSION}_linux_amd64.tar.gz" \
+            | tar -xz -C "$RUNNER_TEMP" trufflehog; then
+            echo "::warning::trufflehog download failed - manifest will record missing output."
+          else
+            "$RUNNER_TEMP/trufflehog" filesystem . --json --no-verification --no-update > "$json" || true
+            python3 "$RUNNER_DIR/.github/scripts/trufflehog_to_sarif.py" "$json" "$out" \
+              --base-dir "$SOURCE_DIR" --cap "$RESULT_CAP" \
+              || echo "::warning::trufflehog SARIF conversion failed - manifest will record missing output."
+          fi
+
+      - name: Run zizmor to SARIF
+        if: ${{ inputs.zizmor }}
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          raw="$SARIF_DIR/zizmor.raw.sarif"
+          out="$SARIF_DIR/zizmor.sarif"
+          if [ ! -d .github/workflows ]; then
+            printf '{"version":"2.1.0","runs":[]}' > "$raw"
+          elif ! python3 -m pip install --quiet "zizmor==${ZIZMOR_VERSION}"; then
+            echo "::warning::zizmor install failed - manifest will record missing output."
+          else
+            zizmor --format sarif . > "$raw" || true
+            if [ ! -s "$raw" ]; then printf '{"version":"2.1.0","runs":[]}' > "$raw"; fi
+          fi
+          if [ -s "$raw" ]; then
+            python3 "$RUNNER_DIR/.github/scripts/sigilix_sarif_contract.py" \
+              zizmor "$raw" "$out" --cap "$RESULT_CAP" --ensure-run \
+              || echo "::warning::zizmor SARIF normalization failed - manifest will record missing output."
+          fi
+
+      - name: Run Hadolint to SARIF
+        if: ${{ inputs.hadolint }}
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          raw="$SARIF_DIR/hadolint.raw.sarif"
+          out="$SARIF_DIR/hadolint.sarif"
+          if ! curl -fsSL -o "$RUNNER_TEMP/hadolint" \
+            "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-linux-x86_64"; then
+            echo "::warning::hadolint download failed - manifest will record missing output."
+          else
+            if ! chmod +x "$RUNNER_TEMP/hadolint"; then
+              echo "::warning::hadolint chmod failed - manifest will record missing output."
+            else
+              files_list="$RUNNER_TEMP/hadolint-files"
+              if ! find . -type f \( -name 'Dockerfile' -o -name 'Dockerfile.*' \) \
+                -not -path './.git/*' -not -path './node_modules/*' -print0 > "$files_list"; then
+                echo "::warning::hadolint file discovery failed - manifest will record missing output."
+              else
+                mapfile -d '' files < "$files_list"
+                if [ "${#files[@]}" -eq 0 ]; then
+                  printf '{"version":"2.1.0","runs":[]}' > "$raw"
+                else
+                  "$RUNNER_TEMP/hadolint" --no-fail --format sarif "${files[@]}" > "$raw" || true
+                  if [ ! -s "$raw" ]; then printf '{"version":"2.1.0","runs":[]}' > "$raw"; fi
+                fi
+                python3 "$RUNNER_DIR/.github/scripts/sigilix_sarif_contract.py" \
+                  hadolint "$raw" "$out" --cap "$RESULT_CAP" --ensure-run \
+                  || echo "::warning::hadolint SARIF normalization failed - manifest will record missing output."
+              fi
+            fi
+          fi
+
+      - name: Run TFLint to SARIF
+        if: ${{ inputs.tflint }}
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          raw="$SARIF_DIR/tflint.raw.sarif"
+          out="$SARIF_DIR/tflint.sarif"
+          if ! curl -fsSL -o "$RUNNER_TEMP/tflint.zip" \
+            "https://github.com/terraform-linters/tflint/releases/download/v${TFLINT_VERSION}/tflint_linux_amd64.zip"; then
+            echo "::warning::tflint download failed - manifest will record missing output."
+          else
+            if ! unzip -q -o "$RUNNER_TEMP/tflint.zip" -d "$RUNNER_TEMP"; then
+              echo "::warning::tflint unzip failed - manifest will record missing output."
+            else
+              files_list="$RUNNER_TEMP/tflint-files"
+              if ! find . -type f -name '*.tf' \
+                -not -path './.git/*' -not -path './node_modules/*' -print0 > "$files_list"; then
+                echo "::warning::tflint file discovery failed - manifest will record missing output."
+              else
+                mapfile -d '' files < "$files_list"
+                if [ "${#files[@]}" -eq 0 ]; then
+                  printf '{"version":"2.1.0","runs":[]}' > "$raw"
+                else
+                  "$RUNNER_TEMP/tflint" --recursive --format sarif > "$raw" || true
+                  if [ ! -s "$raw" ]; then printf '{"version":"2.1.0","runs":[]}' > "$raw"; fi
+                fi
+                python3 "$RUNNER_DIR/.github/scripts/sigilix_sarif_contract.py" \
+                  tflint "$raw" "$out" --cap "$RESULT_CAP" --ensure-run \
+                  || echo "::warning::tflint SARIF normalization failed - manifest will record missing output."
+              fi
+            fi
+          fi
+
       - name: Build scan manifest
         env:
           SEMGREP_ENABLED: ${{ inputs.semgrep }}
@@ -288,6 +463,12 @@ jobs:
           SHELLCHECK_ENABLED: ${{ inputs.shellcheck }}
           GITLEAKS_ENABLED: ${{ inputs.gitleaks }}
           OSV_SCANNER_ENABLED: ${{ inputs.osv-scanner }}
+          CHECKOV_ENABLED: ${{ inputs.checkov }}
+          TRIVY_ENABLED: ${{ inputs.trivy }}
+          TRUFFLEHOG_ENABLED: ${{ inputs.trufflehog }}
+          ZIZMOR_ENABLED: ${{ inputs.zizmor }}
+          HADOLINT_ENABLED: ${{ inputs.hadolint }}
+          TFLINT_ENABLED: ${{ inputs.tflint }}
         run: |
           set -euo pipefail
           declare -a args=()
@@ -308,6 +489,12 @@ jobs:
           add_tool shellcheck "$SHELLCHECK_ENABLED" "$SARIF_DIR/shellcheck.sarif"
           add_tool gitleaks "$GITLEAKS_ENABLED" "$SARIF_DIR/gitleaks.sarif"
           add_tool osv-scanner "$OSV_SCANNER_ENABLED" "$SARIF_DIR/osv.sarif"
+          add_tool checkov "$CHECKOV_ENABLED" "$SARIF_DIR/checkov.sarif"
+          add_tool trivy "$TRIVY_ENABLED" "$SARIF_DIR/trivy.sarif"
+          add_tool trufflehog "$TRUFFLEHOG_ENABLED" "$SARIF_DIR/trufflehog.sarif"
+          add_tool zizmor "$ZIZMOR_ENABLED" "$SARIF_DIR/zizmor.sarif"
+          add_tool hadolint "$HADOLINT_ENABLED" "$SARIF_DIR/hadolint.sarif"
+          add_tool tflint "$TFLINT_ENABLED" "$SARIF_DIR/tflint.sarif"
           python3 "$RUNNER_DIR/.github/scripts/sigilix_scan_manifest.py" "${args[@]}" \
             -o "$SARIF_DIR/scan-manifest.json"
 
@@ -322,6 +509,12 @@ jobs:
             "$SARIF_DIR/shellcheck.sarif" \
             "$SARIF_DIR/gitleaks.sarif" \
             "$SARIF_DIR/osv.sarif" \
+            "$SARIF_DIR/checkov.sarif" \
+            "$SARIF_DIR/trivy.sarif" \
+            "$SARIF_DIR/trufflehog.sarif" \
+            "$SARIF_DIR/zizmor.sarif" \
+            "$SARIF_DIR/hadolint.sarif" \
+            "$SARIF_DIR/tflint.sarif" \
             -o "$SARIF_DIR/sarif.json" \
             --byte-cap "$SARIF_BYTE_CAP"
           (cd "$SARIF_DIR" && sha256sum sarif.json > sarif.json.sha256)

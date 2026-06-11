@@ -25,6 +25,12 @@ Current staged catalog:
 | ShellCheck | on | Converts ShellCheck `json1` output to SARIF. |
 | gitleaks | on | Native SARIF with Sigilix metadata. |
 | osv-scanner | on | Native SARIF with Sigilix metadata. |
+| Checkov | off | Native SARIF with Sigilix metadata. Opt-in IaC scanning. |
+| Trivy | off | Native SARIF with Sigilix metadata. Opt-in filesystem vulnerability, secret, misconfiguration, and license scanning. |
+| TruffleHog | off | Converts TruffleHog JSON output to SARIF. Secret verification is disabled in CI to avoid provider calls with discovered credentials. |
+| zizmor | off | Native SARIF with Sigilix metadata. Opt-in GitHub Actions security scanning. |
+| Hadolint | off | Native SARIF with Sigilix metadata. Opt-in Dockerfile linting. |
+| TFLint | off | Native SARIF with Sigilix metadata. Opt-in Terraform linting. |
 
 This is the first SIG-107 slice toward broader third-party tool parity. The Sigilix metadata
 contract is currently attached to every listed tool.
@@ -62,8 +68,11 @@ a moving ref cannot prove which version of the runner ran.
 
 ### Inputs
 
-All tool booleans default to `true`: `semgrep`, `eslint`, `ruff`, `actionlint`, `shellcheck`,
-`gitleaks`, and `osv-scanner`.
+Default-on tool booleans: `semgrep`, `eslint`, `ruff`, `actionlint`, `shellcheck`, `gitleaks`,
+and `osv-scanner`.
+
+Default-off opt-in tool booleans: `checkov`, `trivy`, `trufflehog`, `zizmor`, `hadolint`, and
+`tflint`.
 
 Other useful inputs:
 
