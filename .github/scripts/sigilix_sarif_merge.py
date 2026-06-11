@@ -38,7 +38,6 @@ def _base_document(documents):
 def _fit_runs(base, runs, byte_cap):
     merged = dict(base)
     kept_runs = []
-    dropped_runs = 0
 
     for run in runs:
         candidate_runs = kept_runs + [run]
@@ -47,9 +46,10 @@ def _fit_runs(base, runs, byte_cap):
         if _encoded_size(candidate) <= byte_cap:
             kept_runs = candidate_runs
         else:
-            dropped_runs += 1
+            break
 
     merged["runs"] = kept_runs
+    dropped_runs = len(runs) - len(kept_runs)
     if dropped_runs:
         return merged, {"droppedRuns": dropped_runs, "keptRuns": len(kept_runs), "reason": "byte-cap"}
     return merged, None

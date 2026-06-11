@@ -32,7 +32,7 @@ class SigilixSarifContractTest(unittest.TestCase):
     def test_metadata_attachment_has_exact_keys_without_role_hints(self):
         run = {"tool": {"driver": {"name": "Semgrep"}}}
 
-        returned = attach_sigilix_metadata(run, "semgrep", dropped_results={"dropped": 2, "kept": 1})
+        returned = attach_sigilix_metadata(run, "semgrep", dropped_results={"droppedCount": 2, "keptCount": 1})
 
         self.assertIs(returned, run)
         properties = run["tool"]["driver"]["properties"]
@@ -42,7 +42,7 @@ class SigilixSarifContractTest(unittest.TestCase):
                 "sigilixSchemaVersion": SIGILIX_SCHEMA_VERSION,
                 "sigilixToolId": "semgrep",
                 "sigilixSource": SIGILIX_SOURCE,
-                "sigilixDroppedResults": {"dropped": 2, "kept": 1},
+                "sigilixDroppedResults": {"droppedCount": 2, "keptCount": 1},
             },
         )
         self.assertNotIn("sigilixRoleHints", properties)
@@ -50,6 +50,10 @@ class SigilixSarifContractTest(unittest.TestCase):
     def test_unknown_tool_id_is_rejected(self):
         with self.assertRaises(ValueError):
             attach_sigilix_metadata({}, "bandit")
+
+    def test_old_dropped_summary_keys_are_rejected(self):
+        with self.assertRaises(ValueError):
+            attach_sigilix_metadata({}, "semgrep", dropped_results={"dropped": 1, "kept": 2})
 
     def test_cap_keeps_errors_before_warnings_and_notes_with_summary(self):
         results = [
@@ -61,7 +65,7 @@ class SigilixSarifContractTest(unittest.TestCase):
         kept, summary = cap_results(results, 2)
 
         self.assertEqual([result["ruleId"] for result in kept], ["E", "W"])
-        self.assertEqual(summary, {"dropped": 1, "kept": 2})
+        self.assertEqual(summary, {"droppedCount": 1, "keptCount": 2})
 
     def test_cap_tie_break_is_stable_by_path_line_rule_and_message(self):
         results = [
@@ -83,7 +87,7 @@ class SigilixSarifContractTest(unittest.TestCase):
                 ("a.py", 2, "A", "aaa"),
             ],
         )
-        self.assertEqual(summary, {"dropped": 1, "kept": 4})
+        self.assertEqual(summary, {"droppedCount": 1, "keptCount": 4})
 
     def test_under_cap_preserves_all_results_and_returns_no_summary(self):
         results = [
@@ -126,10 +130,20 @@ class SigilixSarifMergeTest(unittest.TestCase):
             first = self.write_file(tmpdir, "first.sarif", {"version": "2.1.0", "runs": [{"id": "one"}]})
             second = self.write_file(tmpdir, "second.sarif", {"version": "2.1.0", "runs": [{"id": "two", "payload": "x" * 200}]})
 
-            merged, summary = merge_sarif_documents([first, second], byte_cap=80)
+            merged, summary = merge_sarif_documents([first, second], byte_cap=120)
 
         self.assertEqual(merged["runs"], [{"id": "one"}])
         self.assertEqual(summary, {"droppedRuns": 1, "keptRuns": 1, "reason": "byte-cap"})
+
+    def test_merge_byte_cap_drops_all_runs_when_first_run_is_oversized(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            first = self.write_file(tmpdir, "first.sarif", {"version": "2.1.0", "runs": [{"id": "one", "payload": "x" * 200}]})
+            second = self.write_file(tmpdir, "second.sarif", {"version": "2.1.0", "runs": [{"id": "two"}]})
+
+            merged, summary = merge_sarif_documents([first, second], byte_cap=80)
+
+        self.assertEqual(merged["runs"], [])
+        self.assertEqual(summary, {"droppedRuns": 2, "keptRuns": 0, "reason": "byte-cap"})
 
 
 if __name__ == "__main__":

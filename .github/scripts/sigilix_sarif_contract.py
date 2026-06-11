@@ -79,12 +79,14 @@ def cap_results(results, cap):
 
     ranked = sorted(enumerate(results), key=_cap_sort_key)
     kept = [result for _, result in ranked[:cap]]
-    return kept, {"dropped": len(results) - len(kept), "kept": len(kept)}
+    return kept, {"droppedCount": len(results) - len(kept), "keptCount": len(kept)}
 
 
 def attach_sigilix_metadata(run, tool_id, dropped_results=None):
     if tool_id not in KNOWN_TOOL_IDS:
         raise ValueError(f"unknown Sigilix tool id: {tool_id}")
+    if dropped_results is not None and "droppedCount" not in dropped_results:
+        raise ValueError("dropped_results must include droppedCount")
 
     tool = run.setdefault("tool", {})
     driver = tool.setdefault("driver", {})
