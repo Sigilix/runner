@@ -9,11 +9,25 @@ deterministic-tool review lane and its self-hosted / private-code deployments.
 ## What it is
 
 Sigilix's reviewer runs as a Cloudflare Worker, which cannot execute subprocesses. This repo
-holds the **reusable workflow** that runs deterministic static-analysis tools (Semgrep,
-gitleaks + osv-scanner today; ESLint, Ruff, actionlint, ShellCheck on the roadmap) **inside your own CI**, normalizes their
-output to SARIF, and posts it back to Sigilix with a **GitHub-signed OIDC receipt** — so Sigilix
-can ground its review in real tool output, with cryptographic proof of *where* and *what* ran.
-**Your source never leaves your infrastructure.**
+holds the **reusable workflow** that runs deterministic static-analysis tools **inside your own
+CI**, normalizes their output to SARIF, and posts it back to Sigilix with a **GitHub-signed OIDC
+receipt** so Sigilix can ground its review in real tool output, with cryptographic proof of
+*where* and *what* ran. **Your source never leaves your infrastructure.**
+
+Current staged catalog:
+
+| Tool | Default | Notes |
+| --- | --- | --- |
+| Semgrep | on | Native SARIF with Sigilix metadata. `semgrep-config` defaults to `auto`. |
+| ESLint | on | Safe mode by default: no repository config or plugins. Use `eslint-mode: repo-config` to opt in to repository config. |
+| Ruff | on | Native SARIF with Sigilix metadata. |
+| actionlint | on | Converts actionlint JSON to SARIF for GitHub Actions workflows. |
+| ShellCheck | on | Converts ShellCheck `json1` output to SARIF. |
+| gitleaks | on | Existing secret-scanning SARIF lane, preserved for compatibility. |
+| osv-scanner | on | Existing dependency-vulnerability SARIF lane, preserved for compatibility. |
+
+This is the first SIG-107 slice toward broader third-party tool parity. The Sigilix metadata
+contract is currently attached to Semgrep, ESLint, Ruff, actionlint, and ShellCheck.
 
 ## How to use
 
@@ -46,14 +60,33 @@ jobs:
 SHA** (not a branch or tag): the receipt attests the exact tool version only when you pin, and
 a moving ref cannot prove which version of the runner ran.
 
+### Inputs
+
+All tool booleans default to `true`: `semgrep`, `eslint`, `ruff`, `actionlint`, `shellcheck`,
+`gitleaks`, and `osv-scanner`.
+
+Other useful inputs:
+
+| Input | Default | Meaning |
+| --- | --- | --- |
+| `semgrep-config` | `auto` | Ruleset passed to `semgrep --config`. |
+| `eslint-mode` | `safe` | `safe` avoids repository config/plugins; `repo-config` opts in to the caller's ESLint config. |
+| `result-cap` | `500` | Maximum kept findings per Sigilix-managed tool run. Dropped counts are stored in SARIF metadata. |
+| `sarif-byte-cap` | `7800000` | Maximum merged SARIF payload bytes before later runs are dropped. |
+
 ## Security model
 
 - **No code egress.** The workflow runs in *your* CI; only normalized SARIF findings + the OIDC
   token are sent to Sigilix.
+- **Token isolation.** Tool execution happens in a scan job without `id-token: write`. The ingest
+  job has the OIDC grant, downloads only the SARIF artifact, and does not checkout source.
 - **OIDC-signed receipts.** Each run requests a GitHub Actions OIDC token (`id-token: write`)
   bound to your `repository`, commit `sha`, and the called workflow ref. Sigilix verifies it
   (RS256 against GitHub's JWKS) plus a provenance gate before trusting any finding, and enforces
   single-use so a receipt can't be replayed.
+- **Best-effort caller CI.** Tool findings and tool download failures do not fail the caller's CI;
+  they degrade to SARIF metadata, empty SARIF runs, or warnings. Malformed workflow/script changes
+  in this runner still fail this repo's own CI.
 - **Auditable.** This repository is public so you can read exactly what runs against your code.
 
 ## License

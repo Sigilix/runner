@@ -11,6 +11,9 @@ from sigilix_sarif_contract import (
     cap_results,
 )
 from sigilix_sarif_merge import merge_sarif_documents
+from actionlint_to_sarif import convert_actionlint_json
+from eslint_to_sarif import convert_eslint_json
+from shellcheck_to_sarif import convert_shellcheck_json
 
 
 def make_result(level, path, line, rule_id, message):
@@ -156,11 +159,36 @@ class SigilixSarifContractCliTest(unittest.TestCase):
                 output = json.load(handle)
         return exit_code, output
 
+    def run_contract_cli_with_args(self, content, extra_args):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_path = os.path.join(tmpdir, "input.sarif")
+            output_path = os.path.join(tmpdir, "output.sarif")
+            with open(input_path, "w", encoding="utf-8") as handle:
+                if isinstance(content, str):
+                    handle.write(content)
+                else:
+                    json.dump(content, handle)
+
+            exit_code = contract_main(["semgrep", input_path, output_path, *extra_args])
+
+            with open(output_path, "r", encoding="utf-8") as handle:
+                output = json.load(handle)
+        return exit_code, output
+
     def test_cli_treats_malformed_json_as_empty_sarif(self):
         exit_code, output = self.run_contract_cli("{")
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(output, {"version": "2.1.0", "runs": []})
+
+    def test_cli_can_ensure_empty_metadata_run(self):
+        exit_code, output = self.run_contract_cli_with_args("{", ["--ensure-run"])
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(len(output["runs"]), 1)
+        self.assertEqual(output["runs"][0]["tool"]["driver"]["name"], "Semgrep")
+        self.assertEqual(output["runs"][0]["results"], [])
+        self.assertEqual(output["runs"][0]["tool"]["driver"]["properties"]["sigilixToolId"], "semgrep")
 
     def test_cli_treats_top_level_array_as_empty_sarif(self):
         exit_code, output = self.run_contract_cli([])
@@ -204,6 +232,7 @@ class SigilixSarifContractCliTest(unittest.TestCase):
                     "sigilixSource": SIGILIX_SOURCE,
                 },
             )
+            self.assertEqual(run["tool"]["driver"]["name"], "Semgrep")
 
     def test_cli_drops_non_dict_result_entries(self):
         exit_code, output = self.run_contract_cli(
@@ -228,7 +257,11 @@ class SigilixSarifMergeTest(unittest.TestCase):
     def test_merge_concatenates_runs_and_treats_bad_inputs_as_empty(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             first = self.write_file(tmpdir, "first.sarif", {"version": "2.1.0", "runs": [{"id": "one"}]})
-            second = self.write_file(tmpdir, "second.sarif", {"version": "2.1.0", "$schema": "schema", "runs": [{"id": "two"}]})
+            second = self.write_file(
+                tmpdir,
+                "second.sarif",
+                {"version": "2.1.0", "$schema": "schema", "runs": ["bad-run", {"id": "two"}]},
+            )
             malformed = self.write_file(tmpdir, "bad.sarif", "{")
             missing = os.path.join(tmpdir, "missing.sarif")
             non_object = self.write_file(tmpdir, "array.sarif", [])
@@ -258,6 +291,127 @@ class SigilixSarifMergeTest(unittest.TestCase):
 
         self.assertEqual(merged["runs"], [])
         self.assertEqual(summary, {"droppedRuns": 2, "keptRuns": 0, "reason": "byte-cap"})
+
+    def test_merge_byte_cap_discards_oversized_base_metadata(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            first = self.write_file(
+                tmpdir,
+                "first.sarif",
+                {"version": "2.1.0", "$schema": "x" * 500, "runs": [{"id": "one"}]},
+            )
+
+            merged, summary = merge_sarif_documents([first], byte_cap=80)
+
+        self.assertNotIn("$schema", merged)
+        self.assertEqual(merged["runs"], [{"id": "one"}])
+        self.assertLessEqual(len(json.dumps(merged, separators=(",", ":")).encode("utf-8")), 80)
+        self.assertIsNone(summary)
+
+
+class ConverterTest(unittest.TestCase):
+    def assert_sigilix_properties(self, document, tool_id):
+        self.assertEqual(document["version"], "2.1.0")
+        self.assertEqual(len(document["runs"]), 1)
+        properties = document["runs"][0]["tool"]["driver"]["properties"]
+        self.assertEqual(properties["sigilixSchemaVersion"], SIGILIX_SCHEMA_VERSION)
+        self.assertEqual(properties["sigilixToolId"], tool_id)
+        self.assertEqual(properties["sigilixSource"], SIGILIX_SOURCE)
+        self.assertNotIn("sigilixRoleHints", properties)
+
+    def test_eslint_json_converts_messages_to_sarif_with_metadata(self):
+        document = convert_eslint_json(
+            [
+                {
+                    "filePath": "/repo/src/app.js",
+                    "messages": [
+                        {
+                            "ruleId": "no-undef",
+                            "severity": 2,
+                            "message": "'foo' is not defined.",
+                            "line": 3,
+                            "column": 5,
+                            "endLine": 3,
+                            "endColumn": 8,
+                        }
+                    ],
+                }
+            ],
+            base_dir="/repo",
+        )
+
+        self.assert_sigilix_properties(document, "eslint")
+        result = document["runs"][0]["results"][0]
+        self.assertEqual(result["ruleId"], "no-undef")
+        self.assertEqual(result["level"], "error")
+        self.assertEqual(result["message"], {"text": "'foo' is not defined."})
+        self.assertEqual(result["locations"][0]["physicalLocation"]["artifactLocation"]["uri"], "src/app.js")
+        self.assertEqual(result["locations"][0]["physicalLocation"]["region"]["startLine"], 3)
+        self.assertEqual(result["locations"][0]["physicalLocation"]["region"]["startColumn"], 5)
+
+    def test_actionlint_json_array_and_json_lines_convert_to_sarif(self):
+        array_document = convert_actionlint_json(
+            [
+                {
+                    "message": "property \"branch\" is not defined",
+                    "kind": "syntax-check",
+                    "filepath": ".github/workflows/ci.yml",
+                    "line": 10,
+                    "column": 7,
+                    "endColumn": 13,
+                }
+            ]
+        )
+        lines_document = convert_actionlint_json(
+            '{"message":"bad expression","kind":"expression","filepath":".github/workflows/test.yml","line":4,"column":12}\n'
+        )
+
+        self.assert_sigilix_properties(array_document, "actionlint")
+        self.assertEqual(array_document["runs"][0]["results"][0]["ruleId"], "syntax-check")
+        self.assertEqual(array_document["runs"][0]["results"][0]["level"], "error")
+        self.assertEqual(
+            array_document["runs"][0]["results"][0]["locations"][0]["physicalLocation"]["artifactLocation"]["uri"],
+            ".github/workflows/ci.yml",
+        )
+        self.assert_sigilix_properties(lines_document, "actionlint")
+        self.assertEqual(lines_document["runs"][0]["results"][0]["ruleId"], "expression")
+
+    def test_shellcheck_json1_and_legacy_array_convert_to_sarif(self):
+        json1_document = convert_shellcheck_json(
+            {
+                "comments": [
+                    {
+                        "file": "scripts/build.sh",
+                        "line": 8,
+                        "column": 3,
+                        "endLine": 8,
+                        "endColumn": 12,
+                        "level": "warning",
+                        "code": 2086,
+                        "message": "Double quote to prevent globbing and word splitting.",
+                    }
+                ]
+            }
+        )
+        legacy_document = convert_shellcheck_json(
+            [
+                {
+                    "file": "script.sh",
+                    "line": 2,
+                    "column": 1,
+                    "level": "style",
+                    "code": 2148,
+                    "message": "Tips depend on target shell and yours is unknown.",
+                }
+            ]
+        )
+
+        self.assert_sigilix_properties(json1_document, "shellcheck")
+        result = json1_document["runs"][0]["results"][0]
+        self.assertEqual(result["ruleId"], "SC2086")
+        self.assertEqual(result["level"], "warning")
+        self.assertEqual(result["locations"][0]["physicalLocation"]["artifactLocation"]["uri"], "scripts/build.sh")
+        self.assert_sigilix_properties(legacy_document, "shellcheck")
+        self.assertEqual(legacy_document["runs"][0]["results"][0]["level"], "note")
 
 
 if __name__ == "__main__":

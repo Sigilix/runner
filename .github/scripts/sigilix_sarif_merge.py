@@ -36,6 +36,9 @@ def _base_document(documents):
 
 
 def _fit_runs(base, runs, byte_cap):
+    if _encoded_size(base) > byte_cap:
+        base = dict(EMPTY_SARIF)
+
     merged = dict(base)
     kept_runs = []
 
@@ -62,7 +65,7 @@ def merge_sarif_documents(paths, byte_cap=None):
     for document in documents:
         document_runs = document.get("runs")
         if isinstance(document_runs, list):
-            runs.extend(document_runs)
+            runs.extend(run for run in document_runs if isinstance(run, dict))
 
     merged = dict(base)
     merged["runs"] = runs

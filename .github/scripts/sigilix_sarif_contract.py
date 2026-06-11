@@ -6,6 +6,13 @@ import sys
 SIGILIX_SCHEMA_VERSION = 1
 SIGILIX_SOURCE = "deterministic-tool"
 KNOWN_TOOL_IDS = frozenset({"semgrep", "eslint", "ruff", "actionlint", "shellcheck"})
+DEFAULT_TOOL_NAMES = {
+    "semgrep": "Semgrep",
+    "eslint": "ESLint",
+    "ruff": "Ruff",
+    "actionlint": "actionlint",
+    "shellcheck": "ShellCheck",
+}
 
 _SEVERITY_RANKS = {
     "error": 0,
@@ -128,6 +135,8 @@ def attach_sigilix_metadata(run, tool_id, dropped_results=None):
     if not isinstance(driver, dict):
         driver = {}
         tool["driver"] = driver
+    if not isinstance(driver.get("name"), str) or not driver["name"]:
+        driver["name"] = DEFAULT_TOOL_NAMES[tool_id]
     properties = driver.get("properties")
     if not isinstance(properties, dict):
         properties = {}
@@ -154,6 +163,10 @@ def cap_run_results(run, cap, tool_id=None):
     return run, summary
 
 
+def empty_metadata_run(tool_id):
+    return attach_sigilix_metadata({"tool": {"driver": {"name": DEFAULT_TOOL_NAMES[tool_id]}}, "results": []}, tool_id)
+
+
 def _sanitize_run_results(run):
     results = run.get("results")
     if not isinstance(results, list):
@@ -168,6 +181,7 @@ def _main(argv):
     parser.add_argument("input")
     parser.add_argument("output")
     parser.add_argument("--cap", type=int)
+    parser.add_argument("--ensure-run", action="store_true")
     args = parser.parse_args(argv)
 
     document = _load_sarif_document(args.input)
@@ -184,6 +198,8 @@ def _main(argv):
             _, summary = cap_run_results(run, args.cap)
         attach_sigilix_metadata(run, args.tool_id, summary)
         normalized_runs.append(run)
+    if args.ensure_run and not normalized_runs:
+        normalized_runs.append(empty_metadata_run(args.tool_id))
     if document.get("version") != "2.1.0":
         document["version"] = "2.1.0"
     document["runs"] = normalized_runs

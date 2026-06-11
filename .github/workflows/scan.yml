@@ -1,4 +1,4 @@
-name: Sigilix Runner — deterministic scan
+name: Sigilix Runner - deterministic scan
 
 # Reusable workflow. A caller invokes it (pin to a commit SHA):
 #
@@ -12,9 +12,9 @@ name: Sigilix Runner — deterministic scan
 #         ingest-url: https://<sigilix-worker>/runner/ingest
 #         oidc-audience: <Sigilix's configured ingest audience>
 #
-# It runs deterministic tools on the caller's checked-out code, normalizes the
-# output to SARIF, mints a GitHub Actions OIDC token, and POSTs the SARIF + token
-# to Sigilix. The source never leaves CI except as normalized SARIF findings.
+# The scan job runs deterministic tools on the caller's checked-out code and
+# uploads normalized SARIF. The ingest job has the OIDC grant, does not checkout
+# source, and only posts the SARIF receipt to Sigilix.
 
 on:
   workflow_call:
@@ -27,163 +27,289 @@ on:
         description: "OIDC token audience; must equal Sigilix's configured ingest audience."
         required: true
         type: string
+      semgrep:
+        description: "Run Semgrep and attach Sigilix deterministic-tool metadata."
+        required: false
+        default: true
+        type: boolean
       semgrep-config:
-        description: "Semgrep ruleset passed to `semgrep --config` (default: auto)."
+        description: "Semgrep ruleset passed to semgrep --config."
         required: false
         default: "auto"
         type: string
+      eslint:
+        description: "Run ESLint. Safe mode avoids repository config/plugins."
+        required: false
+        default: true
+        type: boolean
+      eslint-mode:
+        description: "ESLint mode: safe or repo-config."
+        required: false
+        default: "safe"
+        type: string
+      ruff:
+        description: "Run Ruff and attach Sigilix deterministic-tool metadata."
+        required: false
+        default: true
+        type: boolean
+      actionlint:
+        description: "Run actionlint on GitHub Actions workflow files."
+        required: false
+        default: true
+        type: boolean
+      shellcheck:
+        description: "Run ShellCheck on shell scripts."
+        required: false
+        default: true
+        type: boolean
       gitleaks:
-        description: "Also run gitleaks (secret-leak proof) and merge its SARIF (default: true)."
+        description: "Also run gitleaks and merge its SARIF."
         required: false
         default: true
         type: boolean
       osv-scanner:
-        description: "Also run osv-scanner (dependency-vuln proof) and merge its SARIF (default: true)."
+        description: "Also run osv-scanner and merge its SARIF."
         required: false
         default: true
         type: boolean
+      result-cap:
+        description: "Maximum findings kept per Sigilix-managed deterministic tool run."
+        required: false
+        default: 500
+        type: number
+      sarif-byte-cap:
+        description: "Maximum merged SARIF bytes before later runs are dropped."
+        required: false
+        default: 7800000
+        type: number
 
 permissions:
-  contents: read # read the checked-out source
-  id-token: write # mint the OIDC receipt — the ONLY elevated permission
+  contents: read
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   scan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      ACTIONLINT_VERSION: "1.7.12"
+      ESLINT_VERSION: "10.4.1"
+      GITLEAKS_VERSION: "8.21.2"
+      OSV_SCANNER_VERSION: "2.3.8"
+      RESULT_CAP: ${{ inputs.result-cap }}
+      RUFF_VERSION: "0.15.17"
+      SARIF_BYTE_CAP: ${{ inputs.sarif-byte-cap }}
+      SEMGREP_VERSION: "1.166.0"
+      SHELLCHECK_VERSION: "0.11.0"
+      SARIF_DIR: ${{ github.workspace }}/sarif
+      SOURCE_DIR: ${{ github.workspace }}/source
+      RUNNER_DIR: ${{ github.workspace }}/runner
     steps:
-      - name: Checkout (merge ref for PRs)
+      - name: Checkout caller source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          # Use the DEFAULT checkout — no `ref:` override. On a pull_request event
-          # that is `refs/pull/N/merge` (the test-merge commit), whose tip equals
-          # `github.sha`; on push it is `github.sha` directly. That alignment is
-          # load-bearing: the OIDC token's `sha` claim is `github.sha`, so the
-          # scanned tree == the signed commit, and Sigilix can bind the receipt by
-          # requiring `claims.sha` == the PR's `merge_commit_sha` (CR-4). Scanning
-          # the PR head instead would make the SARIF's revisionId disagree with the
-          # bound merge sha and demote the evidence.
+          # Use the default checkout ref. On pull_request, this is the merge
+          # ref whose tip matches github.sha; Sigilix binds the receipt to that
+          # OIDC sha, so scanned tree and signed commit stay aligned.
+          path: source
           persist-credentials: false
 
-      - name: Run Semgrep → SARIF
+      - name: Checkout runner helpers
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: Sigilix/runner
+          ref: ${{ github.workflow_sha }}
+          path: runner
+          persist-credentials: false
+
+      - name: Initialize SARIF workspace
+        run: |
+          set -euo pipefail
+          mkdir -p "$SARIF_DIR"
+
+      - name: Run Semgrep to SARIF
+        if: ${{ inputs.semgrep }}
         env:
           SEMGREP_CONFIG: ${{ inputs.semgrep-config }}
         run: |
           set -euo pipefail
-          python3 -m pip install --quiet semgrep
-          # A non-zero exit on findings must NOT fail the caller's CI — the receipt
-          # is best-effort evidence, not a merge gate.
-          semgrep scan --config "$SEMGREP_CONFIG" --sarif --output sarif.json --quiet || true
-          # Guarantee a well-formed SARIF doc even if semgrep produced none.
-          if [ ! -s sarif.json ]; then printf '{"version":"2.1.0","runs":[]}' > sarif.json; fi
+          cd "$SOURCE_DIR"
+          raw="$SARIF_DIR/semgrep.raw.sarif"
+          out="$SARIF_DIR/semgrep.sarif"
+          if python3 -m pip install --quiet "semgrep==${SEMGREP_VERSION}"; then
+            semgrep scan --config "$SEMGREP_CONFIG" --sarif --output "$raw" --quiet || true
+          else
+            echo "::warning::semgrep install failed - emitting empty Semgrep SARIF run."
+          fi
+          if [ ! -s "$raw" ]; then printf '{"version":"2.1.0","runs":[]}' > "$raw"; fi
+          python3 "$RUNNER_DIR/.github/scripts/sigilix_sarif_contract.py" \
+            semgrep "$raw" "$out" --cap "$RESULT_CAP" --ensure-run
 
-      - name: Run gitleaks → merge SARIF (secret-leak proof)
+      - name: Run ESLint to SARIF
+        if: ${{ inputs.eslint }}
+        env:
+          ESLINT_MODE: ${{ inputs.eslint-mode }}
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          json="$SARIF_DIR/eslint.json"
+          out="$SARIF_DIR/eslint.sarif"
+          declare -a patterns=(-name '*.js' -o -name '*.jsx' -o -name '*.mjs' -o -name '*.cjs')
+          declare -a flags=(--format json)
+          case "$ESLINT_MODE" in
+            safe)
+              flags+=(--no-config-lookup --rule no-undef:error --rule no-unreachable:error)
+              ;;
+            repo-config)
+              patterns+=(-o -name '*.ts' -o -name '*.tsx')
+              ;;
+            *)
+              echo "::warning::unknown eslint-mode '$ESLINT_MODE'; falling back to safe."
+              flags+=(--no-config-lookup --rule no-undef:error --rule no-unreachable:error)
+              ;;
+          esac
+          mapfile -d '' files < <(find . -type f \( "${patterns[@]}" \) \
+            -not -path './.git/*' -not -path './node_modules/*' -print0)
+          if [ "${#files[@]}" -eq 0 ]; then
+            printf '[]' > "$json"
+          else
+            npx --yes "eslint@${ESLINT_VERSION}" "${flags[@]}" "${files[@]}" > "$json" || true
+          fi
+          python3 "$RUNNER_DIR/.github/scripts/eslint_to_sarif.py" "$json" "$out" \
+            --base-dir "$SOURCE_DIR" --cap "$RESULT_CAP"
+
+      - name: Run Ruff to SARIF
+        if: ${{ inputs.ruff }}
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          raw="$SARIF_DIR/ruff.raw.sarif"
+          out="$SARIF_DIR/ruff.sarif"
+          if python3 -m pip install --quiet "ruff==${RUFF_VERSION}"; then
+            python3 -m ruff check --exit-zero --output-format sarif --output-file "$raw" . || true
+          else
+            echo "::warning::ruff install failed - emitting empty Ruff SARIF run."
+          fi
+          if [ ! -s "$raw" ]; then printf '{"version":"2.1.0","runs":[]}' > "$raw"; fi
+          python3 "$RUNNER_DIR/.github/scripts/sigilix_sarif_contract.py" \
+            ruff "$raw" "$out" --cap "$RESULT_CAP" --ensure-run
+
+      - name: Run actionlint to SARIF
+        if: ${{ inputs.actionlint }}
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          json="$SARIF_DIR/actionlint.json"
+          out="$SARIF_DIR/actionlint.sarif"
+          if curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            | tar -xz -C "$RUNNER_TEMP" actionlint; then
+            if [ -d .github/workflows ]; then
+              "$RUNNER_TEMP/actionlint" -format '{{json .}}' > "$json" || true
+            else
+              printf '[]' > "$json"
+            fi
+          else
+            echo "::warning::actionlint download failed - emitting empty actionlint SARIF run."
+            printf '[]' > "$json"
+          fi
+          python3 "$RUNNER_DIR/.github/scripts/actionlint_to_sarif.py" "$json" "$out" \
+            --base-dir "$SOURCE_DIR" --cap "$RESULT_CAP"
+
+      - name: Run ShellCheck to SARIF
+        if: ${{ inputs.shellcheck }}
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          json="$SARIF_DIR/shellcheck.json"
+          out="$SARIF_DIR/shellcheck.sarif"
+          shellcheck_bin="$RUNNER_TEMP/shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
+          if curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" \
+            | tar -xJ -C "$RUNNER_TEMP"; then
+            mapfile -d '' files < <(find . -type f \( -name '*.sh' -o -name '*.bash' -o -name '*.bats' -o -name '*.dash' -o -name '*.ksh' \) \
+              -not -path './.git/*' -not -path './node_modules/*' -print0)
+            if [ "${#files[@]}" -eq 0 ]; then
+              printf '{"comments":[]}' > "$json"
+            else
+              "$shellcheck_bin" -f json1 "${files[@]}" > "$json" || true
+            fi
+          else
+            echo "::warning::ShellCheck download failed - emitting empty ShellCheck SARIF run."
+            printf '{"comments":[]}' > "$json"
+          fi
+          python3 "$RUNNER_DIR/.github/scripts/shellcheck_to_sarif.py" "$json" "$out" \
+            --base-dir "$SOURCE_DIR" --cap "$RESULT_CAP"
+
+      - name: Run gitleaks to SARIF
         if: ${{ inputs.gitleaks }}
-        env:
-          GITLEAKS_VERSION: "8.21.2"
         run: |
           set -euo pipefail
-          # Pinned release binary (no third-party action / unpinned ref). UNLIKE
-          # ci.yml (Sigilix's OWN CI, where a hard fail is fine), this runs in the
-          # CALLER's CI under a best-effort contract — a download failure (404 /
-          # rate-limit / network) must NOT fail their job, so degrade to "gitleaks
-          # unavailable, keep the semgrep SARIF" via exit 0 (sarif.json already
-          # holds the well-formed semgrep doc from the prior step).
-          if ! curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz gitleaks; then
-            echo "::warning::gitleaks download failed — skipping (semgrep SARIF unchanged)."
+          cd "$SOURCE_DIR"
+          out="$SARIF_DIR/gitleaks.sarif"
+          if ! curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C "$RUNNER_TEMP" gitleaks; then
+            echo "::warning::gitleaks download failed - skipping."
+            printf '{"version":"2.1.0","runs":[]}' > "$out"
             exit 0
           fi
-          # `dir` scans the checked-out merge-tree FILES (not git history), so a
-          # finding aligns with the scanned revision (the OIDC `sha`), same as
-          # semgrep. `--exit-code 0` + `|| true`: a leak must NOT fail the caller's
-          # CI — the receipt is best-effort evidence, not a merge gate.
-          ./gitleaks dir . --report-format sarif --report-path gitleaks.sarif --exit-code 0 --no-banner || true
-          if [ ! -s gitleaks.sarif ]; then printf '{"version":"2.1.0","runs":[]}' > gitleaks.sarif; fi
-          # Merge gitleaks' runs into the semgrep SARIF — one envelope = one SARIF
-          # doc, and SARIF allows multiple `runs` (one per tool). Size-guard the
-          # worker's 8 MiB ingest cap (SIG-184 413): if combined exceeds it, keep
-          # semgrep only (the established lane wins) and notice the drop.
-          # `|| true`: the merge must NOT fail the caller's CI — on any python error
-          # (ENOSPC on the write, missing interpreter, pathological input) sarif.json
-          # is left as the semgrep-only doc from the prior step (the degraded state).
-          python3 - <<'PY' || true
-          import json
-          CAP = 7_800_000  # bytes — under the worker's REPORT_SIZE_CAP_BYTES (8 MiB)
-          def load(p):
-              try:
-                  with open(p) as f:
-                      d = json.load(f)
-                  return d if isinstance(d, dict) else {"version": "2.1.0", "runs": []}
-              except Exception:
-                  return {"version": "2.1.0", "runs": []}
-          base = load("sarif.json")
-          extra = load("gitleaks.sarif")
-          base_runs = base.get("runs") or []
-          extra_runs = extra.get("runs") or []
-          merged = dict(base)
-          merged["runs"] = base_runs + extra_runs
-          out = json.dumps(merged)
-          if len(out.encode("utf-8")) > CAP:
-              print("::warning::combined SARIF over ingest cap — keeping semgrep only")
-              base["runs"] = base_runs
-              out = json.dumps(base)
-          with open("sarif.json", "w") as f:
-              f.write(out)
-          PY
+          "$RUNNER_TEMP/gitleaks" dir . --report-format sarif --report-path "$out" --exit-code 0 --no-banner || true
+          if [ ! -s "$out" ]; then printf '{"version":"2.1.0","runs":[]}' > "$out"; fi
 
-      - name: Run osv-scanner → merge SARIF (dependency-vuln proof)
+      - name: Run osv-scanner to SARIF
         if: ${{ inputs.osv-scanner }}
-        env:
-          OSV_SCANNER_VERSION: "2.3.8"
         run: |
           set -euo pipefail
-          # Pinned raw release binary (no third-party action / unpinned ref). Same
-          # best-effort contract as gitleaks: this runs in the CALLER's CI, so a
-          # download failure must NOT fail their job — degrade to the existing
-          # (semgrep[+gitleaks]) SARIF via exit 0 (sarif.json already holds it).
-          if ! curl -fsSL -o osv-scanner "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64"; then
-            echo "::warning::osv-scanner download failed — skipping (SARIF unchanged)."
+          cd "$SOURCE_DIR"
+          out="$SARIF_DIR/osv.sarif"
+          if ! curl -fsSL -o "$RUNNER_TEMP/osv-scanner" \
+            "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64"; then
+            echo "::warning::osv-scanner download failed - skipping."
+            printf '{"version":"2.1.0","runs":[]}' > "$out"
             exit 0
           fi
-          chmod +x osv-scanner
-          # `scan source -r .` finds + scans dependency lockfiles in the checked-out
-          # merge tree (aligns findings with the OIDC `sha`). osv-scanner exits 1 when
-          # vulns are found and non-zero when there are no lockfiles to scan — NEITHER
-          # may fail the caller's CI, so `|| true`. `--output-file` writes the SARIF
-          # straight to a file (not stdout), so a progress/banner line can't corrupt
-          # it — matching the gitleaks `--report-path` pattern (diagnostics → stderr).
-          ./osv-scanner scan source -r --format sarif --output-file osv.sarif . || true
-          if [ ! -s osv.sarif ]; then printf '{"version":"2.1.0","runs":[]}' > osv.sarif; fi
-          # Merge osv-scanner's runs into the running SARIF (semgrep[+gitleaks]) — same
-          # one-doc-multiple-runs model, 8 MiB size-guard, and non-fatal `|| true` as
-          # the gitleaks step. Over-cap keeps the prior tools (the established lane
-          # wins). A malformed osv.sarif (e.g. a stray stdout banner) falls back to
-          # empty via load(), so the prior SARIF is preserved.
-          python3 - <<'PY' || true
-          import json
-          CAP = 7_800_000  # bytes — under the worker's REPORT_SIZE_CAP_BYTES (8 MiB)
-          def load(p):
-              try:
-                  with open(p) as f:
-                      d = json.load(f)
-                  return d if isinstance(d, dict) else {"version": "2.1.0", "runs": []}
-              except Exception:
-                  return {"version": "2.1.0", "runs": []}
-          base = load("sarif.json")
-          extra = load("osv.sarif")
-          base_runs = base.get("runs") or []
-          extra_runs = extra.get("runs") or []
-          merged = dict(base)
-          merged["runs"] = base_runs + extra_runs
-          out = json.dumps(merged)
-          if len(out.encode("utf-8")) > CAP:
-              print("::warning::combined SARIF over ingest cap — keeping prior tools only")
-              base["runs"] = base_runs
-              out = json.dumps(base)
-          with open("sarif.json", "w") as f:
-              f.write(out)
-          PY
+          chmod +x "$RUNNER_TEMP/osv-scanner"
+          "$RUNNER_TEMP/osv-scanner" scan source -r --format sarif --output-file "$out" . || true
+          if [ ! -s "$out" ]; then printf '{"version":"2.1.0","runs":[]}' > "$out"; fi
 
-      - name: Mint OIDC receipt + POST to Sigilix
+      - name: Merge SARIF
+        run: |
+          set -euo pipefail
+          python3 "$RUNNER_DIR/.github/scripts/sigilix_sarif_merge.py" \
+            "$SARIF_DIR/semgrep.sarif" \
+            "$SARIF_DIR/eslint.sarif" \
+            "$SARIF_DIR/ruff.sarif" \
+            "$SARIF_DIR/actionlint.sarif" \
+            "$SARIF_DIR/shellcheck.sarif" \
+            "$SARIF_DIR/gitleaks.sarif" \
+            "$SARIF_DIR/osv.sarif" \
+            -o "$SARIF_DIR/sarif.json" \
+            --byte-cap "$SARIF_BYTE_CAP"
+
+      - name: Upload SARIF artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sigilix-sarif
+          path: sarif/sarif.json
+          if-no-files-found: error
+          retention-days: 1
+
+  ingest:
+    needs: scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: none
+      id-token: write
+    steps:
+      - name: Download SARIF artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: sigilix-sarif
+          path: receipt
+
+      - name: Mint OIDC receipt and POST to Sigilix
         env:
           INGEST_URL: ${{ inputs.ingest-url }}
           AUDIENCE: ${{ inputs.oidc-audience }}
@@ -192,44 +318,29 @@ jobs:
           OIDC_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          # Best-effort: if no OIDC token can be minted (e.g. a forked-PR run where
-          # id-token isn't granted), skip silently — Sigilix treats an absent
-          # receipt as evidence-pending, never a failure.
           if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] || [ -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
-            echo "::notice::OIDC token unavailable (no id-token permission?) — skipping Sigilix receipt."
+            echo "::notice::OIDC token unavailable - skipping Sigilix receipt."
             exit 0
           fi
-          # Non-fatal: any failure (network / HTTP / bad payload) must NOT fail the
-          # caller's CI — under `set -e` an unguarded pipeline would. Time-bound it
-          # so a slow/down token endpoint can't hang the job to the runner timeout.
           TOKEN=$(curl -fsS --connect-timeout 10 --max-time 30 \
             -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
             "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUDIENCE}" \
             | python3 -c "import sys, json; print(json.load(sys.stdin)['value'])") || {
-            echo "::notice::OIDC token mint failed — skipping Sigilix receipt (non-fatal)."
+            echo "::notice::OIDC token mint failed - skipping Sigilix receipt."
             exit 0
           }
           echo "::add-mask::$TOKEN"
-          # Build the envelope with Python so file contents are JSON-encoded, never
-          # shell-interpolated. The envelope carries ONLY the SARIF + the values the
-          # worker binds against the OIDC claims (`repository`/`repositoryId`/`sha`).
-          # It deliberately does NOT send a PR number or head sha: Sigilix derives
-          # the review-join PR number from the SIGNED `claims.ref` and the commit
-          # from `claims.sha`, so no request-body field can influence which PR a
-          # receipt joins (CR-4). `sha` here == `github.sha` == the merge commit on
-          # a pull_request, which the worker checks against the PR's merge_commit_sha.
-          python3 - > envelope.json <<'PY'
+          python3 - <<'PY'
           import json, os
           env = {
-              "sarif": open("sarif.json").read(),
+              "sarif": open("receipt/sarif.json", encoding="utf-8").read(),
               "repository": os.environ["REPOSITORY"],
               "repositoryId": os.environ["REPOSITORY_ID"],
               "sha": os.environ["OIDC_SHA"],
           }
-          json.dump(env, open("envelope.json", "w"))
+          with open("envelope.json", "w", encoding="utf-8") as handle:
+              json.dump(env, handle)
           PY
-          # Time-bounded + non-fatal (the `|| true` keeps a failed POST from
-          # failing the caller's CI — the receipt is best-effort evidence).
           code=$(curl -sS --connect-timeout 10 --max-time 60 -o /tmp/sigilix-resp -w '%{http_code}' -X POST "$INGEST_URL" \
             -H "Authorization: Bearer $TOKEN" \
             -H "content-type: application/json" \
