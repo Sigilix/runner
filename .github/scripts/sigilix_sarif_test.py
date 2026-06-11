@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import os
 import re
@@ -393,6 +395,18 @@ class SigilixScanManifestTest(unittest.TestCase):
         self.assertEqual(manifest["tools"][0]["status"], "invalid-output")
         self.assertEqual(manifest["summary"], {"enabled": 1, "produced": 0, "empty": 0, "missing": 0, "invalid": 1})
 
+    def test_manifest_records_next_batch_missing_outputs(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manifest = build_scan_manifest(
+                [
+                    (tool_id, True, os.path.join(tmpdir, f"{tool_id}.sarif"))
+                    for tool_id in NEXT_BATCH_TOOL_OUTPUTS
+                ]
+            )
+
+        self.assertEqual({tool["toolId"]: tool["status"] for tool in manifest["tools"]}, {tool_id: "missing-output" for tool_id in NEXT_BATCH_TOOL_OUTPUTS})
+        self.assertEqual(manifest["summary"], {"enabled": 6, "produced": 0, "empty": 0, "missing": 6, "invalid": 0})
+
 
 NEXT_BATCH_TOOL_OUTPUTS = {
     "checkov": "checkov.sarif",
@@ -579,6 +593,37 @@ class ConverterTest(unittest.TestCase):
         self.assertNotIn("SHOULD_NOT_APPEAR", json.dumps(document))
         self.assertEqual(result["locations"][0]["physicalLocation"]["artifactLocation"]["uri"], "secrets.env")
         self.assertEqual(result["locations"][0]["physicalLocation"]["region"]["startLine"], 4)
+
+    def test_trufflehog_ndjson_warns_on_non_object_lines(self):
+        from trufflehog_to_sarif import convert_trufflehog_json
+
+        payload = "\n".join(
+            [
+                json.dumps({"SourceMetadata": {"Data": {"Filesystem": {"file": "/repo/first.env", "line": 1}}}, "DetectorName": "AWS"}),
+                json.dumps(["unexpected"]),
+                json.dumps({"SourceMetadata": {"Data": {"Git": {"file": "/repo/second.env", "line": 2}}}, "DetectorName": "GitHub"}),
+            ]
+        )
+        stderr = io.StringIO()
+
+        with contextlib.redirect_stderr(stderr):
+            document = convert_trufflehog_json(payload, base_dir="/repo")
+
+        self.assert_sigilix_properties(document, "trufflehog")
+        self.assertEqual([result["ruleId"] for result in document["runs"][0]["results"]], ["AWS", "GitHub"])
+        self.assertIn("skipped a non-object JSON line", stderr.getvalue())
+
+    def test_trufflehog_missing_line_omits_sarif_region(self):
+        from trufflehog_to_sarif import convert_trufflehog_json
+
+        document = convert_trufflehog_json(
+            json.dumps({"SourceMetadata": {"Data": {"Filesystem": {"file": "/repo/secrets.env"}}}, "DetectorName": "AWS"}),
+            base_dir="/repo",
+        )
+
+        result = document["runs"][0]["results"][0]
+        self.assertEqual(result["locations"][0]["physicalLocation"]["artifactLocation"]["uri"], "secrets.env")
+        self.assertNotIn("region", result["locations"][0]["physicalLocation"])
 
     def test_normalize_path_falls_back_for_paths_outside_base_dir(self):
         self.assertEqual(normalize_path("/repo/src/app.js", base_dir="/repo"), "src/app.js")
