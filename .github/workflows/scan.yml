@@ -165,6 +165,7 @@ jobs:
               flags+=(--no-config-lookup --rule no-undef:error --rule no-unreachable:error)
               ;;
             repo-config)
+              echo "::warning::ESLint repo-config mode executes caller repository ESLint config and plugins in the no-OIDC scan job."
               patterns+=(-o -name '*.ts' -o -name '*.tsx')
               ;;
             *)
