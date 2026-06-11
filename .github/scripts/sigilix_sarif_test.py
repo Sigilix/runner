@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import tempfile
 import unittest
 
@@ -393,6 +394,58 @@ class SigilixScanManifestTest(unittest.TestCase):
         self.assertEqual(manifest["summary"], {"enabled": 1, "produced": 0, "empty": 0, "missing": 0, "invalid": 1})
 
 
+NEXT_BATCH_TOOL_OUTPUTS = {
+    "checkov": "checkov.sarif",
+    "trivy": "trivy.sarif",
+    "trufflehog": "trufflehog.sarif",
+    "zizmor": "zizmor.sarif",
+    "hadolint": "hadolint.sarif",
+    "tflint": "tflint.sarif",
+}
+
+
+class SigilixWorkflowContractTest(unittest.TestCase):
+    def workflow_text(self):
+        path = os.path.join(os.path.dirname(__file__), "..", "workflows", "scan.yml")
+        with open(path, "r", encoding="utf-8") as handle:
+            return handle.read()
+
+    def test_next_batch_tool_inputs_are_explicit_default_off(self):
+        text = self.workflow_text()
+
+        for tool_id in NEXT_BATCH_TOOL_OUTPUTS:
+            self.assertRegex(
+                text,
+                rf"\n      {re.escape(tool_id)}:\n(?:        .+\n)+?        default: false\n",
+            )
+
+    def test_next_batch_tool_outputs_are_manifested_and_merged(self):
+        text = self.workflow_text()
+
+        for tool_id, output_name in NEXT_BATCH_TOOL_OUTPUTS.items():
+            env_var = tool_id.upper().replace("-", "_") + "_ENABLED"
+            self.assertIn(f"{env_var}: ${{{{ inputs.{tool_id} }}}}", text)
+            self.assertIn(f'add_tool {tool_id} "${env_var}" "$SARIF_DIR/{output_name}"', text)
+            self.assertIn(f'"$SARIF_DIR/{output_name}"', text)
+
+    def test_next_batch_tool_versions_are_pinned(self):
+        text = self.workflow_text()
+
+        for env_var in (
+            "CHECKOV_VERSION",
+            "TRIVY_VERSION",
+            "TRUFFLEHOG_VERSION",
+            "ZIZMOR_VERSION",
+            "HADOLINT_VERSION",
+            "TFLINT_VERSION",
+        ):
+            match = re.search(rf"\n      {env_var}: \"([^\"]+)\"\n", text)
+            self.assertIsNotNone(match)
+            version = match.group(1)
+            self.assertNotIn("${{", version)
+            self.assertRegex(version, r"^\d+\.\d+\.\d+$")
+
+
 class ConverterTest(unittest.TestCase):
     def assert_sigilix_properties(self, document, tool_id):
         self.assertEqual(document["version"], "2.1.0")
@@ -497,6 +550,35 @@ class ConverterTest(unittest.TestCase):
         self.assertEqual(result["locations"][0]["physicalLocation"]["artifactLocation"]["uri"], "scripts/build.sh")
         self.assert_sigilix_properties(legacy_document, "shellcheck")
         self.assertEqual(legacy_document["runs"][0]["results"][0]["level"], "note")
+
+    def test_trufflehog_json_lines_convert_to_sarif(self):
+        from trufflehog_to_sarif import convert_trufflehog_json
+
+        document = convert_trufflehog_json(
+            json.dumps(
+                {
+                    "SourceMetadata": {"Data": {"Filesystem": {"file": "/repo/secrets.env", "line": 4}}},
+                    "DetectorName": "AWS",
+                    "Verified": True,
+                    "Raw": "AKIA_SHOULD_NOT_APPEAR",
+                    "Redacted": "AKIA********",
+                    "ExtraData": {"account": "SHOULD_NOT_APPEAR"},
+                }
+            )
+            + "\n",
+            base_dir="/repo",
+        )
+
+        self.assert_sigilix_properties(document, "trufflehog")
+        result = document["runs"][0]["results"][0]
+        self.assertEqual(result["ruleId"], "AWS")
+        self.assertEqual(result["level"], "error")
+        self.assertIn("AWS", result["message"]["text"])
+        self.assertNotIn("verified", result["message"]["text"])
+        self.assertNotIn("AKIA", json.dumps(document))
+        self.assertNotIn("SHOULD_NOT_APPEAR", json.dumps(document))
+        self.assertEqual(result["locations"][0]["physicalLocation"]["artifactLocation"]["uri"], "secrets.env")
+        self.assertEqual(result["locations"][0]["physicalLocation"]["region"]["startLine"], 4)
 
     def test_normalize_path_falls_back_for_paths_outside_base_dir(self):
         self.assertEqual(normalize_path("/repo/src/app.js", base_dir="/repo"), "src/app.js")
