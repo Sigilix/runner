@@ -5,13 +5,37 @@ import sys
 
 SIGILIX_SCHEMA_VERSION = 1
 SIGILIX_SOURCE = "deterministic-tool"
-KNOWN_TOOL_IDS = frozenset({"semgrep", "eslint", "ruff", "actionlint", "shellcheck"})
+KNOWN_TOOL_IDS = frozenset(
+    {
+        "semgrep",
+        "eslint",
+        "ruff",
+        "actionlint",
+        "shellcheck",
+        "gitleaks",
+        "osv-scanner",
+        "checkov",
+        "trivy",
+        "trufflehog",
+        "zizmor",
+        "hadolint",
+        "tflint",
+    }
+)
 DEFAULT_TOOL_NAMES = {
     "semgrep": "Semgrep",
     "eslint": "ESLint",
     "ruff": "Ruff",
     "actionlint": "actionlint",
     "shellcheck": "ShellCheck",
+    "gitleaks": "gitleaks",
+    "osv-scanner": "OSV-Scanner",
+    "checkov": "Checkov",
+    "trivy": "Trivy",
+    "trufflehog": "TruffleHog",
+    "zizmor": "zizmor",
+    "hadolint": "Hadolint",
+    "tflint": "TFLint",
 }
 
 _SEVERITY_RANKS = {

@@ -15,6 +15,7 @@ from actionlint_to_sarif import convert_actionlint_json
 from eslint_to_sarif import convert_eslint_json
 from sarif_converter_common import normalize_path
 from shellcheck_to_sarif import convert_shellcheck_json
+from sigilix_scan_manifest import build_scan_manifest
 
 
 def make_result(level, path, line, rule_id, message):
@@ -55,6 +56,22 @@ class SigilixSarifContractTest(unittest.TestCase):
     def test_unknown_tool_id_is_rejected(self):
         with self.assertRaises(ValueError):
             attach_sigilix_metadata({}, "bandit")
+
+    def test_contract_accepts_legacy_and_next_batch_tool_ids(self):
+        for tool_id, expected_name in (
+            ("gitleaks", "gitleaks"),
+            ("osv-scanner", "OSV-Scanner"),
+            ("checkov", "Checkov"),
+            ("trivy", "Trivy"),
+            ("trufflehog", "TruffleHog"),
+            ("zizmor", "zizmor"),
+            ("hadolint", "Hadolint"),
+            ("tflint", "TFLint"),
+        ):
+            run = attach_sigilix_metadata({}, tool_id)
+            driver = run["tool"]["driver"]
+            self.assertEqual(driver["name"], expected_name)
+            self.assertEqual(driver["properties"]["sigilixToolId"], tool_id)
 
     def test_old_dropped_summary_keys_are_rejected(self):
         with self.assertRaises(ValueError):
@@ -307,6 +324,73 @@ class SigilixSarifMergeTest(unittest.TestCase):
         self.assertEqual(merged["runs"], [{"id": "one"}])
         self.assertLessEqual(len(json.dumps(merged, separators=(",", ":")).encode("utf-8")), 80)
         self.assertIsNone(summary)
+
+
+class SigilixScanManifestTest(unittest.TestCase):
+    def write_json(self, directory, name, content):
+        path = os.path.join(directory, name)
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(content, handle)
+        return path
+
+    def test_manifest_distinguishes_disabled_missing_invalid_empty_and_produced_tools(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            empty = self.write_json(tmpdir, "empty.sarif", {"version": "2.1.0", "runs": []})
+            produced = self.write_json(
+                tmpdir,
+                "produced.sarif",
+                {"version": "2.1.0", "runs": [{"results": [{"ruleId": "X"}, {"ruleId": "Y"}]}]},
+            )
+            invalid = self.write_json(tmpdir, "invalid.sarif", [])
+            missing = os.path.join(tmpdir, "missing.sarif")
+
+            manifest = build_scan_manifest(
+                [
+                    ("eslint", True, empty),
+                    ("semgrep", True, produced),
+                    ("ruff", True, invalid),
+                    ("shellcheck", True, missing),
+                    ("actionlint", False, missing),
+                ]
+            )
+
+        by_tool = {tool["toolId"]: tool for tool in manifest["tools"]}
+        self.assertEqual(by_tool["eslint"]["status"], "empty")
+        self.assertEqual(by_tool["eslint"]["runCount"], 0)
+        self.assertEqual(by_tool["semgrep"]["status"], "produced")
+        self.assertEqual(by_tool["semgrep"]["runCount"], 1)
+        self.assertEqual(by_tool["semgrep"]["resultCount"], 2)
+        self.assertEqual(by_tool["ruff"]["status"], "invalid-output")
+        self.assertEqual(by_tool["shellcheck"]["status"], "missing-output")
+        self.assertEqual(by_tool["actionlint"]["status"], "disabled")
+        self.assertEqual(manifest["summary"], {"enabled": 4, "produced": 1, "empty": 1, "missing": 1, "invalid": 1})
+
+    def test_manifest_rejects_unknown_tool_ids(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            empty = self.write_json(tmpdir, "empty.sarif", {"version": "2.1.0", "runs": []})
+
+            with self.assertRaises(ValueError):
+                build_scan_manifest([("bandit", True, empty)])
+
+    def test_manifest_rejects_duplicate_tool_ids(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            empty = self.write_json(tmpdir, "empty.sarif", {"version": "2.1.0", "runs": []})
+
+            with self.assertRaises(ValueError):
+                build_scan_manifest([("semgrep", True, empty), ("semgrep", False, "")])
+
+    def test_manifest_rejects_more_specs_than_known_tools(self):
+        with self.assertRaises(ValueError):
+            build_scan_manifest([("semgrep", False, "")] * 14)
+
+    def test_manifest_treats_non_object_sarif_runs_as_invalid_output(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            invalid = self.write_json(tmpdir, "invalid.sarif", {"version": "2.1.0", "runs": [None]})
+
+            manifest = build_scan_manifest([("semgrep", True, invalid)])
+
+        self.assertEqual(manifest["tools"][0]["status"], "invalid-output")
+        self.assertEqual(manifest["summary"], {"enabled": 1, "produced": 0, "empty": 0, "missing": 0, "invalid": 1})
 
 
 class ConverterTest(unittest.TestCase):

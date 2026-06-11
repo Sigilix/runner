@@ -249,31 +249,67 @@ jobs:
         run: |
           set -euo pipefail
           cd "$SOURCE_DIR"
+          raw="$SARIF_DIR/gitleaks.raw.sarif"
           out="$SARIF_DIR/gitleaks.sarif"
           if ! curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
             | tar -xz -C "$RUNNER_TEMP" gitleaks; then
-            echo "::warning::gitleaks download failed - skipping."
-            printf '{"version":"2.1.0","runs":[]}' > "$out"
-            exit 0
+            echo "::warning::gitleaks download failed - manifest will record missing output."
+          else
+            "$RUNNER_TEMP/gitleaks" dir . --report-format sarif --report-path "$raw" --exit-code 0 --no-banner || true
+            if [ ! -s "$raw" ]; then printf '{"version":"2.1.0","runs":[]}' > "$raw"; fi
+            python3 "$RUNNER_DIR/.github/scripts/sigilix_sarif_contract.py" \
+              gitleaks "$raw" "$out" --cap "$RESULT_CAP" --ensure-run
           fi
-          "$RUNNER_TEMP/gitleaks" dir . --report-format sarif --report-path "$out" --exit-code 0 --no-banner || true
-          if [ ! -s "$out" ]; then printf '{"version":"2.1.0","runs":[]}' > "$out"; fi
 
       - name: Run osv-scanner to SARIF
         if: ${{ inputs.osv-scanner }}
         run: |
           set -euo pipefail
           cd "$SOURCE_DIR"
+          raw="$SARIF_DIR/osv.raw.sarif"
           out="$SARIF_DIR/osv.sarif"
           if ! curl -fsSL -o "$RUNNER_TEMP/osv-scanner" \
             "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64"; then
-            echo "::warning::osv-scanner download failed - skipping."
-            printf '{"version":"2.1.0","runs":[]}' > "$out"
-            exit 0
+            echo "::warning::osv-scanner download failed - manifest will record missing output."
+          else
+            chmod +x "$RUNNER_TEMP/osv-scanner"
+            "$RUNNER_TEMP/osv-scanner" scan source -r --format sarif --output-file "$raw" . || true
+            if [ ! -s "$raw" ]; then printf '{"version":"2.1.0","runs":[]}' > "$raw"; fi
+            python3 "$RUNNER_DIR/.github/scripts/sigilix_sarif_contract.py" \
+              osv-scanner "$raw" "$out" --cap "$RESULT_CAP" --ensure-run
           fi
-          chmod +x "$RUNNER_TEMP/osv-scanner"
-          "$RUNNER_TEMP/osv-scanner" scan source -r --format sarif --output-file "$out" . || true
-          if [ ! -s "$out" ]; then printf '{"version":"2.1.0","runs":[]}' > "$out"; fi
+
+      - name: Build scan manifest
+        env:
+          SEMGREP_ENABLED: ${{ inputs.semgrep }}
+          ESLINT_ENABLED: ${{ inputs.eslint }}
+          RUFF_ENABLED: ${{ inputs.ruff }}
+          ACTIONLINT_ENABLED: ${{ inputs.actionlint }}
+          SHELLCHECK_ENABLED: ${{ inputs.shellcheck }}
+          GITLEAKS_ENABLED: ${{ inputs.gitleaks }}
+          OSV_SCANNER_ENABLED: ${{ inputs.osv-scanner }}
+        run: |
+          set -euo pipefail
+          declare -a args=()
+          add_tool() {
+            local tool_id="$1"
+            local enabled="$2"
+            local path="$3"
+            if [ "$enabled" = "true" ]; then
+              args+=(--tool "${tool_id}=${path}")
+            else
+              args+=(--disabled "$tool_id")
+            fi
+          }
+          add_tool semgrep "$SEMGREP_ENABLED" "$SARIF_DIR/semgrep.sarif"
+          add_tool eslint "$ESLINT_ENABLED" "$SARIF_DIR/eslint.sarif"
+          add_tool ruff "$RUFF_ENABLED" "$SARIF_DIR/ruff.sarif"
+          add_tool actionlint "$ACTIONLINT_ENABLED" "$SARIF_DIR/actionlint.sarif"
+          add_tool shellcheck "$SHELLCHECK_ENABLED" "$SARIF_DIR/shellcheck.sarif"
+          add_tool gitleaks "$GITLEAKS_ENABLED" "$SARIF_DIR/gitleaks.sarif"
+          add_tool osv-scanner "$OSV_SCANNER_ENABLED" "$SARIF_DIR/osv.sarif"
+          python3 "$RUNNER_DIR/.github/scripts/sigilix_scan_manifest.py" "${args[@]}" \
+            -o "$SARIF_DIR/scan-manifest.json"
 
       - name: Merge SARIF
         run: |
@@ -297,6 +333,7 @@ jobs:
           path: |
             sarif/sarif.json
             sarif/sarif.json.sha256
+            sarif/scan-manifest.json
           if-no-files-found: error
           retention-days: 1
 
@@ -341,9 +378,15 @@ jobs:
           }
           echo "::add-mask::$TOKEN"
           python3 - <<'PY'
-          import json, os
+          import json, os, sys
+          try:
+              scan_manifest = open("receipt/scan-manifest.json", encoding="utf-8").read()
+          except FileNotFoundError:
+              print("::error::scan-manifest.json is missing from receipt/. The scan job must produce it.", file=sys.stderr)
+              sys.exit(1)
           env = {
               "sarif": open("receipt/sarif.json", encoding="utf-8").read(),
+              "scanManifest": scan_manifest,
               "repository": os.environ["REPOSITORY"],
               "repositoryId": os.environ["REPOSITORY_ID"],
               "sha": os.environ["OIDC_SHA"],
