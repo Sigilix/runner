@@ -6,6 +6,7 @@ import unittest
 from sigilix_sarif_contract import (
     SIGILIX_SCHEMA_VERSION,
     SIGILIX_SOURCE,
+    _main as contract_main,
     attach_sigilix_metadata,
     cap_results,
 )
@@ -67,6 +68,10 @@ class SigilixSarifContractTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             attach_sigilix_metadata({}, "semgrep", dropped_results={"droppedCount": True})
 
+    def test_dropped_summary_float_values_are_rejected(self):
+        with self.assertRaises(ValueError):
+            attach_sigilix_metadata({}, "semgrep", dropped_results={"droppedCount": 1.5})
+
     def test_dropped_summary_negative_values_are_rejected(self):
         with self.assertRaises(ValueError):
             attach_sigilix_metadata({}, "semgrep", dropped_results={"droppedCount": 1, "keptCount": -1})
@@ -81,11 +86,11 @@ class SigilixSarifContractTest(unittest.TestCase):
         self.assertEqual(run["tool"]["driver"]["properties"]["sigilixDroppedResults"], {"droppedCount": 1})
 
     def test_dropped_summary_accepts_exact_dropped_and_kept_count_keys(self):
-        run = attach_sigilix_metadata({}, "semgrep", dropped_results={"droppedCount": 1, "keptCount": 2.5})
+        run = attach_sigilix_metadata({}, "semgrep", dropped_results={"droppedCount": 1, "keptCount": 2})
 
         self.assertEqual(
             run["tool"]["driver"]["properties"]["sigilixDroppedResults"],
-            {"droppedCount": 1, "keptCount": 2.5},
+            {"droppedCount": 1, "keptCount": 2},
         )
 
     def test_cap_keeps_errors_before_warnings_and_notes_with_summary(self):
@@ -132,6 +137,67 @@ class SigilixSarifContractTest(unittest.TestCase):
 
         self.assertEqual(kept, results)
         self.assertIsNone(summary)
+
+
+class SigilixSarifContractCliTest(unittest.TestCase):
+    def run_contract_cli(self, content):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_path = os.path.join(tmpdir, "input.sarif")
+            output_path = os.path.join(tmpdir, "output.sarif")
+            with open(input_path, "w", encoding="utf-8") as handle:
+                if isinstance(content, str):
+                    handle.write(content)
+                else:
+                    json.dump(content, handle)
+
+            exit_code = contract_main(["semgrep", input_path, output_path])
+
+            with open(output_path, "r", encoding="utf-8") as handle:
+                output = json.load(handle)
+        return exit_code, output
+
+    def test_cli_treats_malformed_json_as_empty_sarif(self):
+        exit_code, output = self.run_contract_cli("{")
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(output, {"version": "2.1.0", "runs": []})
+
+    def test_cli_treats_top_level_array_as_empty_sarif(self):
+        exit_code, output = self.run_contract_cli([])
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(output, {"version": "2.1.0", "runs": []})
+
+    def test_cli_treats_non_list_runs_as_empty_runs(self):
+        exit_code, output = self.run_contract_cli({"runs": {"bad": True}})
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(output, {"version": "2.1.0", "runs": []})
+
+    def test_cli_normalizes_malformed_tool_driver_and_properties(self):
+        exit_code, output = self.run_contract_cli(
+            {
+                "version": "2.1.0",
+                "runs": [
+                    {"tool": "bad"},
+                    {"tool": {"driver": "bad"}},
+                    {"tool": {"driver": {"properties": "bad"}}},
+                    "not-a-run",
+                ],
+            }
+        )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(len(output["runs"]), 3)
+        for run in output["runs"]:
+            self.assertEqual(
+                run["tool"]["driver"]["properties"],
+                {
+                    "sigilixSchemaVersion": SIGILIX_SCHEMA_VERSION,
+                    "sigilixToolId": "semgrep",
+                    "sigilixSource": SIGILIX_SOURCE,
+                },
+            )
 
 
 class SigilixSarifMergeTest(unittest.TestCase):

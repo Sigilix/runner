@@ -1,6 +1,5 @@
 import argparse
 import json
-import math
 import sys
 
 
@@ -23,6 +22,21 @@ _DROPPED_RESULT_KEY_SETS = (
 
 def _ensure_dict(value):
     return value if isinstance(value, dict) else {}
+
+
+def _empty_sarif_document():
+    return {"version": "2.1.0", "runs": []}
+
+
+def _load_sarif_document(path):
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            document = json.load(handle)
+    except Exception:
+        return _empty_sarif_document()
+    if not isinstance(document, dict):
+        return _empty_sarif_document()
+    return document
 
 
 def _first_location(result):
@@ -94,10 +108,10 @@ def _validate_dropped_results(dropped_results):
     if frozenset(dropped_results.keys()) not in _DROPPED_RESULT_KEY_SETS:
         raise ValueError("dropped_results must contain only droppedCount and optional keptCount")
     for key, value in dropped_results.items():
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise ValueError(f"dropped_results {key} must be a number")
-        if not math.isfinite(value) or value < 0:
-            raise ValueError(f"dropped_results {key} must be non-negative and finite")
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError(f"dropped_results {key} must be an integer")
+        if value < 0:
+            raise ValueError(f"dropped_results {key} must be non-negative")
 
 
 def attach_sigilix_metadata(run, tool_id, dropped_results=None):
@@ -106,9 +120,18 @@ def attach_sigilix_metadata(run, tool_id, dropped_results=None):
     if dropped_results is not None:
         _validate_dropped_results(dropped_results)
 
-    tool = run.setdefault("tool", {})
-    driver = tool.setdefault("driver", {})
-    properties = driver.setdefault("properties", {})
+    tool = run.get("tool")
+    if not isinstance(tool, dict):
+        tool = {}
+        run["tool"] = tool
+    driver = tool.get("driver")
+    if not isinstance(driver, dict):
+        driver = {}
+        tool["driver"] = driver
+    properties = driver.get("properties")
+    if not isinstance(properties, dict):
+        properties = {}
+        driver["properties"] = properties
     properties.pop("sigilixRoleHints", None)
     properties["sigilixSchemaVersion"] = SIGILIX_SCHEMA_VERSION
     properties["sigilixToolId"] = tool_id
@@ -139,11 +162,11 @@ def _main(argv):
     parser.add_argument("--cap", type=int)
     args = parser.parse_args(argv)
 
-    with open(args.input, "r", encoding="utf-8") as handle:
-        document = json.load(handle)
-    runs = document.get("runs") if isinstance(document, dict) else []
+    document = _load_sarif_document(args.input)
+    runs = document.get("runs")
     if not isinstance(runs, list):
         runs = []
+    normalized_runs = []
     for run in runs:
         if not isinstance(run, dict):
             continue
@@ -151,7 +174,9 @@ def _main(argv):
         if args.cap is not None:
             _, summary = cap_run_results(run, args.cap)
         attach_sigilix_metadata(run, args.tool_id, summary)
-    document["runs"] = runs
+        normalized_runs.append(run)
+    document.setdefault("version", "2.1.0")
+    document["runs"] = normalized_runs
     with open(args.output, "w", encoding="utf-8") as handle:
         json.dump(document, handle, separators=(",", ":"))
     return 0
