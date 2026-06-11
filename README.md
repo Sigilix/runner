@@ -23,11 +23,11 @@ Current staged catalog:
 | Ruff | on | Native SARIF with Sigilix metadata. |
 | actionlint | on | Converts actionlint JSON to SARIF for GitHub Actions workflows. |
 | ShellCheck | on | Converts ShellCheck `json1` output to SARIF. |
-| gitleaks | on | Existing secret-scanning SARIF lane, preserved for compatibility. |
-| osv-scanner | on | Existing dependency-vulnerability SARIF lane, preserved for compatibility. |
+| gitleaks | on | Native SARIF with Sigilix metadata. |
+| osv-scanner | on | Native SARIF with Sigilix metadata. |
 
 This is the first SIG-107 slice toward broader third-party tool parity. The Sigilix metadata
-contract is currently attached to Semgrep, ESLint, Ruff, actionlint, and ShellCheck.
+contract is currently attached to every listed tool.
 
 ## How to use
 
@@ -87,6 +87,9 @@ Other useful inputs:
 - **Best-effort caller CI.** Tool findings and tool download failures do not fail the caller's CI;
   they degrade to SARIF metadata, empty SARIF runs, or warnings. Malformed workflow/script changes
   in this runner still fail this repo's own CI.
+- **Coverage manifest.** Every run uploads and posts `scan-manifest.json` next to SARIF, recording
+  each configured tool as `produced`, `empty`, `missing-output`, `invalid-output`, or `disabled`.
+  Sigilix stores it with the OIDC receipt so green CI never has to mean "all tools ran."
 - **Auditable.** This repository is public so you can read exactly what runs against your code.
 
 ## License
