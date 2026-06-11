@@ -66,6 +66,8 @@ def _parse_text(text):
             continue
         if isinstance(item, dict):
             findings.append(item)
+        else:
+            print("::warning::trufflehog_to_sarif skipped a non-object JSON line.", file=sys.stderr)
     return findings
 
 
