@@ -55,6 +55,39 @@ class SigilixSarifContractTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             attach_sigilix_metadata({}, "semgrep", dropped_results={"dropped": 1, "kept": 2})
 
+    def test_dropped_summary_extra_keys_are_rejected(self):
+        with self.assertRaises(ValueError):
+            attach_sigilix_metadata({}, "semgrep", dropped_results={"droppedCount": 1, "toolId": "semgrep"})
+
+    def test_dropped_summary_non_dict_is_rejected(self):
+        with self.assertRaises(ValueError):
+            attach_sigilix_metadata({}, "semgrep", dropped_results="droppedCount")
+
+    def test_dropped_summary_bool_values_are_rejected(self):
+        with self.assertRaises(ValueError):
+            attach_sigilix_metadata({}, "semgrep", dropped_results={"droppedCount": True})
+
+    def test_dropped_summary_negative_values_are_rejected(self):
+        with self.assertRaises(ValueError):
+            attach_sigilix_metadata({}, "semgrep", dropped_results={"droppedCount": 1, "keptCount": -1})
+
+    def test_dropped_summary_non_finite_values_are_rejected(self):
+        with self.assertRaises(ValueError):
+            attach_sigilix_metadata({}, "semgrep", dropped_results={"droppedCount": float("inf")})
+
+    def test_dropped_summary_accepts_exact_dropped_count_key(self):
+        run = attach_sigilix_metadata({}, "semgrep", dropped_results={"droppedCount": 1})
+
+        self.assertEqual(run["tool"]["driver"]["properties"]["sigilixDroppedResults"], {"droppedCount": 1})
+
+    def test_dropped_summary_accepts_exact_dropped_and_kept_count_keys(self):
+        run = attach_sigilix_metadata({}, "semgrep", dropped_results={"droppedCount": 1, "keptCount": 2.5})
+
+        self.assertEqual(
+            run["tool"]["driver"]["properties"]["sigilixDroppedResults"],
+            {"droppedCount": 1, "keptCount": 2.5},
+        )
+
     def test_cap_keeps_errors_before_warnings_and_notes_with_summary(self):
         results = [
             make_result("note", "a.py", 1, "N", "note"),

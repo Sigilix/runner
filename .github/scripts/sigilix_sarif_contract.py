@@ -1,5 +1,6 @@
 import argparse
 import json
+import math
 import sys
 
 
@@ -13,6 +14,11 @@ _SEVERITY_RANKS = {
     "note": 2,
     "none": 3,
 }
+
+_DROPPED_RESULT_KEY_SETS = (
+    frozenset({"droppedCount"}),
+    frozenset({"droppedCount", "keptCount"}),
+)
 
 
 def _ensure_dict(value):
@@ -82,11 +88,23 @@ def cap_results(results, cap):
     return kept, {"droppedCount": len(results) - len(kept), "keptCount": len(kept)}
 
 
+def _validate_dropped_results(dropped_results):
+    if not isinstance(dropped_results, dict):
+        raise ValueError("dropped_results must be a dict")
+    if frozenset(dropped_results.keys()) not in _DROPPED_RESULT_KEY_SETS:
+        raise ValueError("dropped_results must contain only droppedCount and optional keptCount")
+    for key, value in dropped_results.items():
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"dropped_results {key} must be a number")
+        if not math.isfinite(value) or value < 0:
+            raise ValueError(f"dropped_results {key} must be non-negative and finite")
+
+
 def attach_sigilix_metadata(run, tool_id, dropped_results=None):
     if tool_id not in KNOWN_TOOL_IDS:
         raise ValueError(f"unknown Sigilix tool id: {tool_id}")
-    if dropped_results is not None and "droppedCount" not in dropped_results:
-        raise ValueError("dropped_results must include droppedCount")
+    if dropped_results is not None:
+        _validate_dropped_results(dropped_results)
 
     tool = run.setdefault("tool", {})
     driver = tool.setdefault("driver", {})
