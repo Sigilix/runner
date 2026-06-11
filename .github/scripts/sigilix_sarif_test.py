@@ -174,6 +174,12 @@ class SigilixSarifContractCliTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(output, {"version": "2.1.0", "runs": []})
 
+    def test_cli_normalizes_invalid_version_with_non_list_runs(self):
+        exit_code, output = self.run_contract_cli({"version": 123, "runs": {"bad": True}})
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(output, {"version": "2.1.0", "runs": []})
+
     def test_cli_normalizes_malformed_tool_driver_and_properties(self):
         exit_code, output = self.run_contract_cli(
             {
@@ -198,6 +204,15 @@ class SigilixSarifContractCliTest(unittest.TestCase):
                     "sigilixSource": SIGILIX_SOURCE,
                 },
             )
+
+    def test_cli_drops_non_dict_result_entries(self):
+        exit_code, output = self.run_contract_cli(
+            {"version": "2.1.0", "runs": [{"results": ["bad-result", {"message": {"text": "ok"}}, None]}]}
+        )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(output["version"], "2.1.0")
+        self.assertEqual(output["runs"][0]["results"], [{"message": {"text": "ok"}}])
 
 
 class SigilixSarifMergeTest(unittest.TestCase):

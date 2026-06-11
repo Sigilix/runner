@@ -154,6 +154,14 @@ def cap_run_results(run, cap, tool_id=None):
     return run, summary
 
 
+def _sanitize_run_results(run):
+    results = run.get("results")
+    if not isinstance(results, list):
+        run["results"] = []
+        return
+    run["results"] = [result for result in results if isinstance(result, dict)]
+
+
 def _main(argv):
     parser = argparse.ArgumentParser(description="Attach Sigilix metadata to SARIF runs.")
     parser.add_argument("tool_id", choices=sorted(KNOWN_TOOL_IDS))
@@ -171,11 +179,13 @@ def _main(argv):
         if not isinstance(run, dict):
             continue
         summary = None
+        _sanitize_run_results(run)
         if args.cap is not None:
             _, summary = cap_run_results(run, args.cap)
         attach_sigilix_metadata(run, args.tool_id, summary)
         normalized_runs.append(run)
-    document.setdefault("version", "2.1.0")
+    if document.get("version") != "2.1.0":
+        document["version"] = "2.1.0"
     document["runs"] = normalized_runs
     with open(args.output, "w", encoding="utf-8") as handle:
         json.dump(document, handle, separators=(",", ":"))
