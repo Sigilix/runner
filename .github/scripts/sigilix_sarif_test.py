@@ -673,10 +673,19 @@ class SigilixWorkflowContractTest(unittest.TestCase):
         config_text = self.config_text("oxlint-sigilix.oxlintrc.jsonc")
 
         self.assertIn("oxlint_config=\"$RUNNER_DIR/.github/config/oxlint-sigilix.oxlintrc.jsonc\"", text)
-        self.assertIn('--config "$oxlint_config"', text)
-        self.assertIn("--disable-nested-config", text)
-        self.assertIn("-A all -D correctness", text)
+        self.assertRegex(
+            text,
+            r'"\$\{oxlint_cmd\[@\]\}" \\\n\s+--config "\$oxlint_config" \\\n\s+--disable-nested-config \\\n\s+--no-ignore \\\n\s+-A all -D correctness',
+        )
         self.assertIn("Rule selection is controlled entirely by CLI flags", config_text)
+
+    def test_node_runtime_is_pinned_for_npx_tools(self):
+        text = self.workflow_text()
+
+        self.assertIn('NODE_VERSION: "22.13.0"', text)
+        self.assertIn("uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020", text)
+        self.assertIn("node-version: ${{ env.NODE_VERSION }}", text)
+        self.assertIn("check-latest: false", text)
 
     def test_oxlint_asserts_pinned_runtime_version_before_scan(self):
         text = self.workflow_text()
