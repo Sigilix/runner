@@ -20,6 +20,8 @@ jobs:
           python3 .github/scripts/eslint_ts_workflow_test.py
           python3 .github/scripts/tsc_workflow_test.py
           python3 .github/scripts/pylint_workflow_test.py
+          python3 .github/scripts/trufflehog_converter_test.py
+          python3 .github/scripts/language_config_tools_workflow_test.py
           python3 .github/scripts/knip_workflow_test.py
           python3 .github/scripts/biome_workflow_test.py
           python3 .github/scripts/docs_config_tools_test.py

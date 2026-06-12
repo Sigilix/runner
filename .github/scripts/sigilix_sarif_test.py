@@ -427,8 +427,10 @@ class SigilixScanManifestTest(unittest.TestCase):
 
     def test_manifest_records_missing_outputs_for_enabled_tools(self):
         expected_outputs = {
-            **NEXT_BATCH_TOOL_OUTPUTS,
+            **OPT_IN_SECURITY_TOOL_OUTPUTS,
+            **TERRAFORM_TOOL_OUTPUTS,
             **LANGUAGE_SARIF_TOOL_OUTPUTS,
+            **LANGUAGE_CONVERTER_TOOL_OUTPUTS,
             **CONFIG_TOOL_OUTPUTS,
             **CI_SECURITY_TOOL_OUTPUTS,
             **CONTAINER_TOOL_OUTPUTS,
@@ -467,14 +469,28 @@ class SigilixScanManifestTest(unittest.TestCase):
                 self.assertEqual(driver["properties"]["sigilixToolId"], tool_id)
 
 
-NEXT_BATCH_TOOL_OUTPUTS = {
+OPT_IN_SECURITY_TOOL_OUTPUTS = {
     "checkov": "checkov.sarif",
     "trivy": "trivy.sarif",
     "trufflehog": "trufflehog.sarif",
+}
+
+TERRAFORM_TOOL_OUTPUTS = {
     "tflint": "tflint.sarif",
 }
 
-LANGUAGE_SARIF_TOOL_OUTPUTS = {"biome": "biome.sarif", "oxlint": "oxlint.sarif", "ast-grep": "ast-grep.sarif"}
+LANGUAGE_SARIF_TOOL_OUTPUTS = {
+    "biome": "biome.sarif",
+    "oxlint": "oxlint.sarif",
+    "ast-grep": "ast-grep.sarif",
+    "golangci-lint": "golangci-lint.sarif",
+    "htmlhint": "htmlhint.sarif",
+}
+
+LANGUAGE_CONVERTER_TOOL_OUTPUTS = {
+    "flake8": "flake8.sarif",
+    "stylelint": "stylelint.sarif",
+}
 
 CONFIG_TOOL_OUTPUTS = {"yamllint": "yamllint.sarif", "markdownlint": "markdownlint.sarif", "dotenv-linter": "dotenv-linter.sarif", "checkmake": "checkmake.sarif"}
 
@@ -497,8 +513,10 @@ ALL_TOOL_OUTPUTS = {
     "shellcheck": "shellcheck.sarif",
     "gitleaks": "gitleaks.sarif",
     "osv-scanner": "osv.sarif",
-    **NEXT_BATCH_TOOL_OUTPUTS,
+    **OPT_IN_SECURITY_TOOL_OUTPUTS,
+    **TERRAFORM_TOOL_OUTPUTS,
     **LANGUAGE_SARIF_TOOL_OUTPUTS,
+    **LANGUAGE_CONVERTER_TOOL_OUTPUTS,
     **CONFIG_TOOL_OUTPUTS,
     **CI_SECURITY_TOOL_OUTPUTS,
     **CONTAINER_TOOL_OUTPUTS,
@@ -584,12 +602,12 @@ class SigilixWorkflowContractTest(unittest.TestCase):
     def test_tool_output_groups_are_disjoint(self):
         legacy_tools = {"semgrep", "eslint", "ruff", "actionlint", "shellcheck", "gitleaks", "osv-scanner"}
 
-        self.assertFalse(legacy_tools & set(NEXT_BATCH_TOOL_OUTPUTS))
+        self.assertFalse(legacy_tools & set(OPT_IN_SECURITY_TOOL_OUTPUTS))
         self.assertFalse(legacy_tools & set(LANGUAGE_SARIF_TOOL_OUTPUTS))
-        self.assertFalse(set(NEXT_BATCH_TOOL_OUTPUTS) & set(LANGUAGE_SARIF_TOOL_OUTPUTS))
-        self.assertNotIn("zizmor", NEXT_BATCH_TOOL_OUTPUTS)
+        self.assertFalse(set(OPT_IN_SECURITY_TOOL_OUTPUTS) & set(LANGUAGE_SARIF_TOOL_OUTPUTS))
+        self.assertNotIn("zizmor", OPT_IN_SECURITY_TOOL_OUTPUTS)
         self.assertIn("zizmor", CI_SECURITY_TOOL_OUTPUTS)
-        self.assertNotIn("hadolint", NEXT_BATCH_TOOL_OUTPUTS)
+        self.assertNotIn("hadolint", OPT_IN_SECURITY_TOOL_OUTPUTS)
         self.assertIn("hadolint", CONTAINER_TOOL_OUTPUTS)
 
     def test_workflow_uses_static_tool_manifest_for_manifest_and_merge(self):
@@ -602,11 +620,10 @@ class SigilixWorkflowContractTest(unittest.TestCase):
         self.assertNotIn('python3 - "$TOOL_MANIFEST"', text)
         self.assertNotIn("jq -r", text)
 
-    def test_opt_in_tool_inputs_are_default_off_except_biome_and_oxlint(self):
+    def test_remaining_opt_in_security_tool_inputs_are_default_off(self):
         text = self.workflow_text()
 
-        self.assertTrue({"biome", "oxlint", "ast-grep"} <= set({**NEXT_BATCH_TOOL_OUTPUTS, **LANGUAGE_SARIF_TOOL_OUTPUTS}))
-        for tool_id in set({**NEXT_BATCH_TOOL_OUTPUTS, **LANGUAGE_SARIF_TOOL_OUTPUTS}) - {"biome", "oxlint", "ast-grep"}:
+        for tool_id in OPT_IN_SECURITY_TOOL_OUTPUTS:
             self.assertRegex(
                 text,
                 rf"\n      {re.escape(tool_id)}:\n(?:        .+\n)+?        default: false\n",
@@ -644,8 +661,10 @@ class SigilixWorkflowContractTest(unittest.TestCase):
     def test_catalog_tool_outputs_are_manifested_and_merged(self):
         rows = {row["id"]: row for row in self.tool_manifest()}
         expected_outputs = {
-            **NEXT_BATCH_TOOL_OUTPUTS,
+            **OPT_IN_SECURITY_TOOL_OUTPUTS,
+            **TERRAFORM_TOOL_OUTPUTS,
             **LANGUAGE_SARIF_TOOL_OUTPUTS,
+            **LANGUAGE_CONVERTER_TOOL_OUTPUTS,
             **CONFIG_TOOL_OUTPUTS,
             **CI_SECURITY_TOOL_OUTPUTS,
             **CONTAINER_TOOL_OUTPUTS,
@@ -836,120 +855,6 @@ class ConverterTest(unittest.TestCase):
         self.assertEqual(result["locations"][0]["physicalLocation"]["artifactLocation"]["uri"], "scripts/build.sh")
         self.assert_sigilix_properties(legacy_document, "shellcheck")
         self.assertEqual(legacy_document["runs"][0]["results"][0]["level"], "note")
-
-    def test_trufflehog_json_lines_convert_to_sarif(self):
-        from trufflehog_to_sarif import convert_trufflehog_json
-
-        document = convert_trufflehog_json(
-            json.dumps(
-                {
-                    "SourceMetadata": {"Data": {"Filesystem": {"file": "/repo/secrets.env", "line": 4}}},
-                    "DetectorName": "AWS",
-                    "Verified": True,
-                    "Raw": "AKIA_SHOULD_NOT_APPEAR",
-                    "Redacted": "AKIA********",
-                    "ExtraData": {"account": "SHOULD_NOT_APPEAR"},
-                    "StructuredData": {"token": "STRUCTURED_SHOULD_NOT_APPEAR"},
-                }
-            )
-            + "\n",
-            base_dir="/repo",
-        )
-
-        self.assert_sigilix_properties(document, "trufflehog")
-        result = document["runs"][0]["results"][0]
-        self.assertEqual(result["ruleId"], "AWS")
-        self.assertEqual(result["level"], "error")
-        self.assertEqual(result["message"]["text"], "TruffleHog found AWS secret")
-        self.assertEqual(result["properties"], {"trufflehogVerified": True})
-        self.assertNotIn("AKIA", json.dumps(document))
-        self.assertNotIn("SHOULD_NOT_APPEAR", json.dumps(document))
-        self.assertNotIn("STRUCTURED_SHOULD_NOT_APPEAR", json.dumps(document))
-        self.assertEqual(result["locations"][0]["physicalLocation"]["artifactLocation"]["uri"], "secrets.env")
-        self.assertEqual(result["locations"][0]["physicalLocation"]["region"]["startLine"], 4)
-
-    def test_trufflehog_unverified_findings_are_warning_without_secret_dependent_dedupe(self):
-        from trufflehog_to_sarif import convert_trufflehog_json
-
-        finding = {
-            "SourceMetadata": {"Data": {"Filesystem": {"file": "/repo/secrets.env", "line": 4}}},
-            "DetectorName": "AWS",
-            "Verified": False,
-            "Raw": "AKIA_DUPLICATE_SECRET",
-        }
-        document = convert_trufflehog_json("\n".join([json.dumps(finding), json.dumps(finding)]), base_dir="/repo")
-
-        results = document["runs"][0]["results"]
-        self.assertEqual(len(results), 2)
-        self.assertEqual(results[0]["level"], "warning")
-        self.assertEqual(results[0]["message"]["text"], "TruffleHog found AWS secret")
-        self.assertEqual(results[0]["properties"], {"trufflehogVerified": False})
-        self.assertNotIn("AKIA_DUPLICATE_SECRET", json.dumps(document))
-
-        metadata_only = dict(finding)
-        metadata_only.pop("Raw")
-        document = convert_trufflehog_json(
-            "\n".join([json.dumps(metadata_only), json.dumps(metadata_only)]),
-            base_dir="/repo",
-        )
-        self.assertEqual(len(document["runs"][0]["results"]), 1)
-
-        whitespace_raw = dict(finding, Raw="   ")
-        document = convert_trufflehog_json("\n".join([json.dumps(whitespace_raw), json.dumps(whitespace_raw)]), base_dir="/repo")
-        self.assertEqual(len(document["runs"][0]["results"]), 1)
-
-        numeric_raw = dict(finding, Raw=0)
-        document = convert_trufflehog_json("\n".join([json.dumps(numeric_raw), json.dumps(numeric_raw)]), base_dir="/repo")
-        self.assertEqual(len(document["runs"][0]["results"]), 2)
-
-    def test_trufflehog_metadata_dedupe_prefers_verified_finding(self):
-        from trufflehog_to_sarif import convert_trufflehog_json
-
-        base = {"SourceMetadata": {"Data": {"Filesystem": {"file": "/repo/secrets.env", "line": 4}}}, "DetectorName": "AWS"}
-        document = convert_trufflehog_json(
-            "\n".join([json.dumps(dict(base, Verified=False)), json.dumps(dict(base, Verified="true"))]),
-            base_dir="/repo",
-        )
-
-        result = document["runs"][0]["results"][0]
-        self.assertEqual(len(document["runs"][0]["results"]), 1)
-        self.assertEqual(result["level"], "error")
-        self.assertEqual(result["properties"], {"trufflehogVerified": True})
-
-        other = {"SourceMetadata": {"Data": {"Filesystem": {"file": "/repo/other.env", "line": 8}}}, "DetectorName": "GCP"}
-        document = convert_trufflehog_json("\n".join([json.dumps(base), json.dumps(other)]), base_dir="/repo")
-        self.assertEqual([result["ruleId"] for result in document["runs"][0]["results"]], ["AWS", "GCP"])
-
-    def test_trufflehog_ndjson_warns_on_non_object_lines(self):
-        from trufflehog_to_sarif import convert_trufflehog_json
-
-        payload = "\n".join(
-            [
-                json.dumps({"SourceMetadata": {"Data": {"Filesystem": {"file": "/repo/first.env", "line": 1}}}, "DetectorName": "AWS"}),
-                json.dumps(["unexpected"]),
-                json.dumps({"SourceMetadata": {"Data": {"Git": {"file": "/repo/second.env", "line": 2}}}, "DetectorName": "GitHub"}),
-            ]
-        )
-        stderr = io.StringIO()
-
-        with contextlib.redirect_stderr(stderr):
-            document = convert_trufflehog_json(payload, base_dir="/repo")
-
-        self.assert_sigilix_properties(document, "trufflehog")
-        self.assertEqual([result["ruleId"] for result in document["runs"][0]["results"]], ["AWS", "GitHub"])
-        self.assertIn("skipped a non-object JSON line", stderr.getvalue())
-
-    def test_trufflehog_missing_line_omits_sarif_region(self):
-        from trufflehog_to_sarif import convert_trufflehog_json
-
-        document = convert_trufflehog_json(
-            json.dumps({"SourceMetadata": {"Data": {"Filesystem": {"file": "/repo/secrets.env"}}}, "DetectorName": "AWS"}),
-            base_dir="/repo",
-        )
-
-        result = document["runs"][0]["results"][0]
-        self.assertEqual(result["locations"][0]["physicalLocation"]["artifactLocation"]["uri"], "secrets.env")
-        self.assertNotIn("region", result["locations"][0]["physicalLocation"])
 
     def test_yamllint_parsable_output_converts_to_sarif(self):
         from yamllint_to_sarif import convert_yamllint_output
