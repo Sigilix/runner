@@ -604,11 +604,11 @@ class SigilixWorkflowContractTest(unittest.TestCase):
         self.assertNotIn('python3 - "$TOOL_MANIFEST"', text)
         self.assertNotIn("jq -r", text)
 
-    def test_opt_in_tool_inputs_are_default_off_except_oxlint(self):
+    def test_opt_in_tool_inputs_are_default_off_except_biome_and_oxlint(self):
         text = self.workflow_text()
 
-        self.assertIn("oxlint", {**NEXT_BATCH_TOOL_OUTPUTS, **LANGUAGE_SARIF_TOOL_OUTPUTS})
-        for tool_id in set({**NEXT_BATCH_TOOL_OUTPUTS, **LANGUAGE_SARIF_TOOL_OUTPUTS}) - {"oxlint"}:
+        self.assertTrue({"biome", "oxlint"} <= set({**NEXT_BATCH_TOOL_OUTPUTS, **LANGUAGE_SARIF_TOOL_OUTPUTS}))
+        for tool_id in set({**NEXT_BATCH_TOOL_OUTPUTS, **LANGUAGE_SARIF_TOOL_OUTPUTS}) - {"biome", "oxlint"}:
             self.assertRegex(
                 text,
                 rf"\n      {re.escape(tool_id)}:\n(?:        .+\n)+?        default: false\n",

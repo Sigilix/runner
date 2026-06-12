@@ -24,6 +24,15 @@ class BiomeWorkflowRuntimeTest(unittest.TestCase):
         self.assertIsNotNone(match)
         return match.group(0)
 
+    def workflow_input_block(self, input_name):
+        pattern = rf"\n      {re.escape(input_name)}:\n(?P<block>(?:        .+\n)+)"
+        match = re.search(pattern, self.workflow_text())
+        self.assertIsNotNone(match)
+        return match.group("block")
+
+    def test_biome_defaults_on_after_runner_owned_hardening(self):
+        self.assertIn("        default: true\n", self.workflow_input_block("biome"))
+
     def test_biome_uses_sigilix_configured_lint_mode(self):
         block = self.workflow_biome_block()
 
