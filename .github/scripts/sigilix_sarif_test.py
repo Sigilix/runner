@@ -829,6 +829,7 @@ class ConverterTest(unittest.TestCase):
                     "Raw": "AKIA_SHOULD_NOT_APPEAR",
                     "Redacted": "AKIA********",
                     "ExtraData": {"account": "SHOULD_NOT_APPEAR"},
+                    "StructuredData": {"token": "STRUCTURED_SHOULD_NOT_APPEAR"},
                 }
             )
             + "\n",
@@ -839,12 +840,65 @@ class ConverterTest(unittest.TestCase):
         result = document["runs"][0]["results"][0]
         self.assertEqual(result["ruleId"], "AWS")
         self.assertEqual(result["level"], "error")
-        self.assertIn("AWS", result["message"]["text"])
-        self.assertNotIn("verified", result["message"]["text"])
+        self.assertEqual(result["message"]["text"], "TruffleHog found AWS secret")
+        self.assertEqual(result["properties"], {"trufflehogVerified": True})
         self.assertNotIn("AKIA", json.dumps(document))
         self.assertNotIn("SHOULD_NOT_APPEAR", json.dumps(document))
+        self.assertNotIn("STRUCTURED_SHOULD_NOT_APPEAR", json.dumps(document))
         self.assertEqual(result["locations"][0]["physicalLocation"]["artifactLocation"]["uri"], "secrets.env")
         self.assertEqual(result["locations"][0]["physicalLocation"]["region"]["startLine"], 4)
+
+    def test_trufflehog_unverified_findings_are_warning_without_secret_dependent_dedupe(self):
+        from trufflehog_to_sarif import convert_trufflehog_json
+
+        finding = {
+            "SourceMetadata": {"Data": {"Filesystem": {"file": "/repo/secrets.env", "line": 4}}},
+            "DetectorName": "AWS",
+            "Verified": False,
+            "Raw": "AKIA_DUPLICATE_SECRET",
+        }
+        document = convert_trufflehog_json("\n".join([json.dumps(finding), json.dumps(finding)]), base_dir="/repo")
+
+        results = document["runs"][0]["results"]
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[0]["level"], "warning")
+        self.assertEqual(results[0]["message"]["text"], "TruffleHog found AWS secret")
+        self.assertEqual(results[0]["properties"], {"trufflehogVerified": False})
+        self.assertNotIn("AKIA_DUPLICATE_SECRET", json.dumps(document))
+
+        metadata_only = dict(finding)
+        metadata_only.pop("Raw")
+        document = convert_trufflehog_json(
+            "\n".join([json.dumps(metadata_only), json.dumps(metadata_only)]),
+            base_dir="/repo",
+        )
+        self.assertEqual(len(document["runs"][0]["results"]), 1)
+
+        whitespace_raw = dict(finding, Raw="   ")
+        document = convert_trufflehog_json("\n".join([json.dumps(whitespace_raw), json.dumps(whitespace_raw)]), base_dir="/repo")
+        self.assertEqual(len(document["runs"][0]["results"]), 1)
+
+        numeric_raw = dict(finding, Raw=0)
+        document = convert_trufflehog_json("\n".join([json.dumps(numeric_raw), json.dumps(numeric_raw)]), base_dir="/repo")
+        self.assertEqual(len(document["runs"][0]["results"]), 2)
+
+    def test_trufflehog_metadata_dedupe_prefers_verified_finding(self):
+        from trufflehog_to_sarif import convert_trufflehog_json
+
+        base = {"SourceMetadata": {"Data": {"Filesystem": {"file": "/repo/secrets.env", "line": 4}}}, "DetectorName": "AWS"}
+        document = convert_trufflehog_json(
+            "\n".join([json.dumps(dict(base, Verified=False)), json.dumps(dict(base, Verified="true"))]),
+            base_dir="/repo",
+        )
+
+        result = document["runs"][0]["results"][0]
+        self.assertEqual(len(document["runs"][0]["results"]), 1)
+        self.assertEqual(result["level"], "error")
+        self.assertEqual(result["properties"], {"trufflehogVerified": True})
+
+        other = {"SourceMetadata": {"Data": {"Filesystem": {"file": "/repo/other.env", "line": 8}}}, "DetectorName": "GCP"}
+        document = convert_trufflehog_json("\n".join([json.dumps(base), json.dumps(other)]), base_dir="/repo")
+        self.assertEqual([result["ruleId"] for result in document["runs"][0]["results"]], ["AWS", "GCP"])
 
     def test_trufflehog_ndjson_warns_on_non_object_lines(self):
         from trufflehog_to_sarif import convert_trufflehog_json
