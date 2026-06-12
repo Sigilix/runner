@@ -1,0 +1,35 @@
+id: js-async-array-predicate
+valid:
+  - const ready = items.filter(item => isReady(item));
+  - const transformed = items.map(async item => transform(item));
+invalid:
+  - const ready = items.filter(async item => isReady(item));
+  - const anyReady = items.some(async (item) => isReady(item));
+  - const allReady = items.every(async function (item) { return isReady(item); });
+  - const found = items.find(async item => isReady(item));
+  - const index = items.findIndex(async item => isReady(item));
+  - const last = items.findLast(async (item) => isReady(item));
+  - const lastIndex = items.findLastIndex(async function (item) { return isReady(item); });
+---
+id: ts-async-array-predicate
+valid:
+  - "const ready = items.filter((item: Item) => isReady(item));"
+  - "const transformed = items.map(async (item: Item) => transform(item));"
+invalid:
+  - const ready = items.filter(async item => isReady(item));
+  - "const anyReady = items.some(async (item: Item) => isReady(item));"
+  - "const allReady = items.every(async function (item: Item) { return isReady(item); });"
+  - const found = items.find(async item => isReady(item));
+  - const index = items.findIndex(async item => isReady(item));
+  - const last = items.findLast(async item => isReady(item));
+  - const lastIndex = items.findLastIndex(async item => isReady(item));
+---
+id: tsx-async-array-predicate
+valid:
+  - "function ReadyList({items}: Props) { return <>{items.filter(item => isReady(item)).map(render)}</>; }"
+  - "function ReadyList({items}: Props) { return <>{items.findLast(item => isReady(item))}</>; }"
+  - "function ReadyList({items}: Props) { return <>{items.findLastIndex(item => isReady(item))}</>; }"
+invalid:
+  - "function ReadyList({items}: Props) { return <>{items.filter(async item => isReady(item)).map(render)}</>; }"
+  - "function ReadyList({items}: Props) { return <>{items.findLast(async item => isReady(item))}</>; }"
+  - "function ReadyList({items}: Props) { return <>{items.findLastIndex(async item => isReady(item))}</>; }"

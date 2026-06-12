@@ -37,9 +37,11 @@ Current staged catalog:
 | TFLint | off | Native SARIF with Sigilix metadata. Opt-in Terraform linting. |
 | Biome | on | Native SARIF with Sigilix metadata. Default-on Sigilix-controlled correctness linting for JS/TS and JSON; uses runner-owned config, bypasses caller ignore files, and skips common generated-output directories. |
 | Oxlint | on | Native SARIF with Sigilix metadata. Default-on Sigilix-controlled correctness linting for JavaScript and TypeScript; uses runner-owned config, disables caller Oxlint config and ignore files, skips common generated-output directories, and checks pinned npm package integrity before scanning. |
+| ast-grep | on | Native SARIF with Sigilix metadata. Default-on Sigilix-owned AST rules for high-confidence JavaScript and TypeScript async array logic bugs; verified npm tarballs are installed without package scripts before scanning. Caller ignore files are bypassed; common generated and vendor directories are still excluded. |
 
 > **SIG-107:** `oxlint` now defaults to `true`. Set `oxlint: false` (boolean) in the caller workflow to suppress it.
 > `biome` now defaults to `true`. Set `biome: false` (boolean) in the caller workflow to suppress it.
+> `ast-grep` now defaults to `true`. Set `ast-grep: false` (boolean) in the caller workflow to suppress it.
 > `markdownlint`, `dotenv-linter`, and `checkmake` now default to `true`. Set the matching
 > boolean input to `false` in the caller workflow to suppress one of them.
 
@@ -81,7 +83,7 @@ a moving ref cannot prove which version of the runner ran.
 
 Default-on tool booleans: `semgrep`, `eslint`, `ruff`, `actionlint`, `shellcheck`, `yamllint`,
 `markdownlint`, `dotenv-linter`, `checkmake`, `gitleaks`, `osv-scanner`, `zizmor`, `hadolint`,
-`biome`, and `oxlint`.
+`biome`, `oxlint`, and `ast-grep`.
 
 Default-off opt-in tool booleans: `checkov`, `trivy`, `trufflehog`, and `tflint`.
 

@@ -76,6 +76,11 @@
       "output": "oxlint.sarif"
     },
     {
+      "id": "ast-grep",
+      "env": "AST_GREP_ENABLED",
+      "output": "ast-grep.sarif"
+    },
+    {
       "id": "yamllint",
       "env": "YAMLLINT_ENABLED",
       "output": "yamllint.sarif"

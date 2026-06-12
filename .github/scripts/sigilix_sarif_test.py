@@ -81,6 +81,7 @@ class SigilixSarifContractTest(unittest.TestCase):
             ("tflint", "TFLint"),
             ("biome", "Biome"),
             ("oxlint", "Oxlint"),
+            ("ast-grep", "ast-grep"),
         ):
             run = attach_sigilix_metadata({}, tool_id)
             driver = run["tool"]["driver"]
@@ -473,10 +474,7 @@ NEXT_BATCH_TOOL_OUTPUTS = {
     "tflint": "tflint.sarif",
 }
 
-LANGUAGE_SARIF_TOOL_OUTPUTS = {
-    "biome": "biome.sarif",
-    "oxlint": "oxlint.sarif",
-}
+LANGUAGE_SARIF_TOOL_OUTPUTS = {"biome": "biome.sarif", "oxlint": "oxlint.sarif", "ast-grep": "ast-grep.sarif"}
 
 CONFIG_TOOL_OUTPUTS = {"yamllint": "yamllint.sarif", "markdownlint": "markdownlint.sarif", "dotenv-linter": "dotenv-linter.sarif", "checkmake": "checkmake.sarif"}
 
@@ -605,8 +603,8 @@ class SigilixWorkflowContractTest(unittest.TestCase):
     def test_opt_in_tool_inputs_are_default_off_except_biome_and_oxlint(self):
         text = self.workflow_text()
 
-        self.assertTrue({"biome", "oxlint"} <= set({**NEXT_BATCH_TOOL_OUTPUTS, **LANGUAGE_SARIF_TOOL_OUTPUTS}))
-        for tool_id in set({**NEXT_BATCH_TOOL_OUTPUTS, **LANGUAGE_SARIF_TOOL_OUTPUTS}) - {"biome", "oxlint"}:
+        self.assertTrue({"biome", "oxlint", "ast-grep"} <= set({**NEXT_BATCH_TOOL_OUTPUTS, **LANGUAGE_SARIF_TOOL_OUTPUTS}))
+        for tool_id in set({**NEXT_BATCH_TOOL_OUTPUTS, **LANGUAGE_SARIF_TOOL_OUTPUTS}) - {"biome", "oxlint", "ast-grep"}:
             self.assertRegex(
                 text,
                 rf"\n      {re.escape(tool_id)}:\n(?:        .+\n)+?        default: false\n",
