@@ -31,9 +31,11 @@ Current staged catalog:
 | zizmor | off | Native SARIF with Sigilix metadata. Opt-in GitHub Actions security scanning. |
 | Hadolint | off | Native SARIF with Sigilix metadata. Opt-in Dockerfile linting. |
 | TFLint | off | Native SARIF with Sigilix metadata. Opt-in Terraform linting. |
+| Biome | off | Native SARIF with Sigilix metadata. Opt-in web source linting and format diagnostics. |
+| Oxlint | off | Native SARIF with Sigilix metadata. Opt-in JavaScript and TypeScript linting. |
 
-This is the first SIG-107 slice toward broader third-party tool parity. The Sigilix metadata
-contract is currently attached to every listed tool.
+These SIG-107 slices move the runner toward broader third-party tool parity. The Sigilix
+metadata contract is currently attached to every listed tool.
 
 ## How to use
 
@@ -72,7 +74,7 @@ Default-on tool booleans: `semgrep`, `eslint`, `ruff`, `actionlint`, `shellcheck
 and `osv-scanner`.
 
 Default-off opt-in tool booleans: `checkov`, `trivy`, `trufflehog`, `zizmor`, `hadolint`, and
-`tflint`.
+`tflint`, `biome`, and `oxlint`.
 
 Other useful inputs:
 

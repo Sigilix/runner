@@ -20,6 +20,8 @@ KNOWN_TOOL_IDS = frozenset(
         "zizmor",
         "hadolint",
         "tflint",
+        "biome",
+        "oxlint",
     }
 )
 DEFAULT_TOOL_NAMES = {
@@ -36,6 +38,8 @@ DEFAULT_TOOL_NAMES = {
     "zizmor": "zizmor",
     "hadolint": "Hadolint",
     "tflint": "TFLint",
+    "biome": "Biome",
+    "oxlint": "Oxlint",
 }
 
 _SEVERITY_RANKS = {
