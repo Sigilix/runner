@@ -96,7 +96,7 @@ else
     elif [ "$tsc_can_scan" = true ] && ! tsc_version="$("$tsc_bin" --version 2>/dev/null)"; then
       tsc_can_scan=false
     elif [ "$tsc_can_scan" = true ]; then
-      tsc_version="$(printf '%s\n' "$tsc_version" | grep -Eo '^(Version|v)[[:space:]]*[0-9]+[.][0-9]+[.][0-9]+' | grep -Eo '[0-9]+[.][0-9]+[.][0-9]+' | head -n 1 || true)"
+      tsc_version="$(printf '%s\n' "$tsc_version" | grep -Eo '^Version[[:space:]]+[0-9]+[.][0-9]+[.][0-9]+' | grep -Eo '[0-9]+[.][0-9]+[.][0-9]+' | head -n 1 || true)"
       if [ "$tsc_version" != "$TYPESCRIPT_VERSION" ]; then
         tsc_can_scan=false
       fi

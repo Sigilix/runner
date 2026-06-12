@@ -82,7 +82,10 @@ def _looks_like_external_package(specifier):
     if specifier.startswith("~") and (len(specifier) == 1 or specifier[1] == "/"):
         return False
     if specifier.startswith("@") and len(specifier) > 1 and specifier[1] not in ("/", "~", "."):
-        return True
+        parts = specifier.split("/")
+        if parts[0] == "@types":
+            return True
+        return specifier.count("/") == 1
     return "/" not in specifier
 
 

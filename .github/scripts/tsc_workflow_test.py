@@ -79,7 +79,7 @@ class TypeScriptCompilerWorkflowTest(unittest.TestCase):
         self.assertIn("npm pack --silent --pack-destination", text)
         self.assertIn("verify_package_integrity", text)
         self.assertIn("npm install --silent --prefix \"$tsc_install_dir\" --ignore-scripts --omit=optional", text)
-        self.assertIn("'^(Version|v)[[:space:]]*[0-9]+[.][0-9]+[.][0-9]+'", text)
+        self.assertIn("'^Version[[:space:]]+[0-9]+[.][0-9]+[.][0-9]+'", text)
         self.assertIn("--noEmit", text)
         self.assertIn("--pretty false", text)
         self.assertIn("--skipLibCheck", text)
@@ -98,6 +98,8 @@ class TypeScriptCompilerWorkflowTest(unittest.TestCase):
                     "src/index.ts(3,7): error TS2322: Type 'string' is not assignable to type 'number'.",
                     "src/index.ts(1,21): error TS2307: Cannot find module 'missing' or its corresponding type declarations.",
                     "src/index.ts(5,21): error TS2307: Cannot find module '@types/react-dom' or its corresponding type declarations.",
+                    "src/index.ts(7,21): error TS2307: Cannot find module '@types/react-dom/v18' or its corresponding type declarations.",
+                    "src/index.ts(6,21): error TS2307: Cannot find module '@myorg/utils/subpath' or its corresponding type declarations.",
                     "src/index.ts(4,21): error TS2307: Cannot find module './internal' or its corresponding type declarations.",
                     "src/index.ts(2,22): error TS7016: Could not find a declaration file for module 'legacy'.",
                 ]
@@ -108,7 +110,7 @@ class TypeScriptCompilerWorkflowTest(unittest.TestCase):
         run = document["runs"][0]
         self.assertEqual(run["tool"]["driver"]["properties"]["sigilixToolId"], "tsc")
         results = run["results"]
-        self.assertEqual([result["ruleId"] for result in results], ["tsc/TS2322", "tsc/TS2307"])
+        self.assertEqual([result["ruleId"] for result in results], ["tsc/TS2322", "tsc/TS2307", "tsc/TS2307"])
         self.assertIn("TS2307", convert_tsc_text.__globals__["DEPENDENCY_NOISE_CODES"])
         self.assertIn("TS7016", convert_tsc_text.__globals__["DEPENDENCY_NOISE_CODES"])
         self.assertEqual(results[0]["level"], "error")
@@ -116,7 +118,10 @@ class TypeScriptCompilerWorkflowTest(unittest.TestCase):
         self.assertEqual(results[0]["locations"][0]["physicalLocation"]["region"]["startLine"], 3)
         self.assertEqual(results[0]["locations"][0]["physicalLocation"]["region"]["startColumn"], 7)
         self.assertIn("not assignable", results[0]["message"]["text"])
-        self.assertIn("./internal", results[1]["message"]["text"])
+        messages = "\n".join(result["message"]["text"] for result in results)
+        self.assertIn("@myorg/utils/subpath", messages)
+        self.assertIn("./internal", messages)
+        self.assertNotIn("@types/react-dom", messages)
 
     def test_tsc_converter_drops_diagnostics_outside_source_root(self):
         from tsc_to_sarif import convert_tsc_text
