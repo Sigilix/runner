@@ -105,7 +105,7 @@ on:
       biome:
         description: "Run Biome on web source files and merge its SARIF."
         required: false
-        default: false
+        default: true
         type: boolean
       oxlint:
         description: "Run Oxlint on JavaScript and TypeScript source files and merge its SARIF."
