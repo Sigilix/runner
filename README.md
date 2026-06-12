@@ -33,7 +33,9 @@ Current staged catalog:
 | Hadolint | on | Native SARIF with Sigilix metadata for Dockerfile linting. |
 | TFLint | off | Native SARIF with Sigilix metadata. Opt-in Terraform linting. |
 | Biome | off | Native SARIF with Sigilix metadata. Opt-in web source linting and format diagnostics. |
-| Oxlint | off | Native SARIF with Sigilix metadata. Opt-in Sigilix-controlled correctness linting for JavaScript and TypeScript; uses runner-owned config, disables caller Oxlint config and ignore files, skips common generated-output directories, and checks pinned npm package integrity before scanning. |
+| Oxlint | on | Native SARIF with Sigilix metadata. Default-on Sigilix-controlled correctness linting for JavaScript and TypeScript; uses runner-owned config, disables caller Oxlint config and ignore files, skips common generated-output directories, and checks pinned npm package integrity before scanning. |
+
+> **SIG-107:** `oxlint` now defaults to `true`. Set `oxlint: false` (boolean) in the caller workflow to suppress it.
 
 These SIG-107 slices move the runner toward broader third-party tool parity. The Sigilix
 metadata contract is currently attached to every listed tool.
@@ -72,10 +74,9 @@ a moving ref cannot prove which version of the runner ran.
 ### Inputs
 
 Default-on tool booleans: `semgrep`, `eslint`, `ruff`, `actionlint`, `shellcheck`, `yamllint`,
-`gitleaks`, `osv-scanner`, `zizmor`, and `hadolint`.
+`gitleaks`, `osv-scanner`, `zizmor`, `hadolint`, and `oxlint`.
 
-Default-off opt-in tool booleans: `checkov`, `trivy`, `trufflehog`, `tflint`, `biome`, and
-`oxlint`.
+Default-off opt-in tool booleans: `checkov`, `trivy`, `trufflehog`, `tflint`, and `biome`.
 
 Other useful inputs:
 
