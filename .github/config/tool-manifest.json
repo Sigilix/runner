@@ -1,0 +1,79 @@
+{
+  "tools": [
+    {
+      "id": "semgrep",
+      "env": "SEMGREP_ENABLED",
+      "output": "semgrep.sarif"
+    },
+    {
+      "id": "eslint",
+      "env": "ESLINT_ENABLED",
+      "output": "eslint.sarif"
+    },
+    {
+      "id": "ruff",
+      "env": "RUFF_ENABLED",
+      "output": "ruff.sarif"
+    },
+    {
+      "id": "actionlint",
+      "env": "ACTIONLINT_ENABLED",
+      "output": "actionlint.sarif"
+    },
+    {
+      "id": "shellcheck",
+      "env": "SHELLCHECK_ENABLED",
+      "output": "shellcheck.sarif"
+    },
+    {
+      "id": "gitleaks",
+      "env": "GITLEAKS_ENABLED",
+      "output": "gitleaks.sarif"
+    },
+    {
+      "id": "osv-scanner",
+      "env": "OSV_SCANNER_ENABLED",
+      "output": "osv.sarif"
+    },
+    {
+      "id": "checkov",
+      "env": "CHECKOV_ENABLED",
+      "output": "checkov.sarif"
+    },
+    {
+      "id": "trivy",
+      "env": "TRIVY_ENABLED",
+      "output": "trivy.sarif"
+    },
+    {
+      "id": "trufflehog",
+      "env": "TRUFFLEHOG_ENABLED",
+      "output": "trufflehog.sarif"
+    },
+    {
+      "id": "zizmor",
+      "env": "ZIZMOR_ENABLED",
+      "output": "zizmor.sarif"
+    },
+    {
+      "id": "hadolint",
+      "env": "HADOLINT_ENABLED",
+      "output": "hadolint.sarif"
+    },
+    {
+      "id": "tflint",
+      "env": "TFLINT_ENABLED",
+      "output": "tflint.sarif"
+    },
+    {
+      "id": "biome",
+      "env": "BIOME_ENABLED",
+      "output": "biome.sarif"
+    },
+    {
+      "id": "oxlint",
+      "env": "OXLINT_ENABLED",
+      "output": "oxlint.sarif"
+    }
+  ]
+}

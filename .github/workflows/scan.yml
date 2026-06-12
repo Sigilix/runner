@@ -156,6 +156,7 @@ jobs:
       SARIF_DIR: ${{ github.workspace }}/sarif
       SOURCE_DIR: ${{ github.workspace }}/source
       RUNNER_DIR: ${{ github.workspace }}/runner
+      TOOL_MANIFEST: ${{ github.workspace }}/runner/.github/config/tool-manifest.json
     steps:
       - name: Checkout caller source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -533,54 +534,17 @@ jobs:
           OXLINT_ENABLED: ${{ inputs.oxlint }}
         run: |
           set -euo pipefail
-          declare -a args=()
-          add_tool() {
-            local tool_id="$1"
-            local enabled="$2"
-            local path="$3"
-            if [ "$enabled" = "true" ]; then
-              args+=(--tool "${tool_id}=${path}")
-            else
-              args+=(--disabled "$tool_id")
-            fi
-          }
-          add_tool semgrep "$SEMGREP_ENABLED" "$SARIF_DIR/semgrep.sarif"
-          add_tool eslint "$ESLINT_ENABLED" "$SARIF_DIR/eslint.sarif"
-          add_tool ruff "$RUFF_ENABLED" "$SARIF_DIR/ruff.sarif"
-          add_tool actionlint "$ACTIONLINT_ENABLED" "$SARIF_DIR/actionlint.sarif"
-          add_tool shellcheck "$SHELLCHECK_ENABLED" "$SARIF_DIR/shellcheck.sarif"
-          add_tool gitleaks "$GITLEAKS_ENABLED" "$SARIF_DIR/gitleaks.sarif"
-          add_tool osv-scanner "$OSV_SCANNER_ENABLED" "$SARIF_DIR/osv.sarif"
-          add_tool checkov "$CHECKOV_ENABLED" "$SARIF_DIR/checkov.sarif"
-          add_tool trivy "$TRIVY_ENABLED" "$SARIF_DIR/trivy.sarif"
-          add_tool trufflehog "$TRUFFLEHOG_ENABLED" "$SARIF_DIR/trufflehog.sarif"
-          add_tool zizmor "$ZIZMOR_ENABLED" "$SARIF_DIR/zizmor.sarif"
-          add_tool hadolint "$HADOLINT_ENABLED" "$SARIF_DIR/hadolint.sarif"
-          add_tool tflint "$TFLINT_ENABLED" "$SARIF_DIR/tflint.sarif"
-          add_tool biome "$BIOME_ENABLED" "$SARIF_DIR/biome.sarif"
-          add_tool oxlint "$OXLINT_ENABLED" "$SARIF_DIR/oxlint.sarif"
-          python3 "$RUNNER_DIR/.github/scripts/sigilix_scan_manifest.py" "${args[@]}" \
+          python3 "$RUNNER_DIR/.github/scripts/sigilix_scan_manifest.py" \
+            --tool-manifest "$TOOL_MANIFEST" \
+            --sarif-dir "$SARIF_DIR" \
             -o "$SARIF_DIR/scan-manifest.json"
 
       - name: Merge SARIF
         run: |
           set -euo pipefail
           python3 "$RUNNER_DIR/.github/scripts/sigilix_sarif_merge.py" \
-            "$SARIF_DIR/semgrep.sarif" \
-            "$SARIF_DIR/eslint.sarif" \
-            "$SARIF_DIR/ruff.sarif" \
-            "$SARIF_DIR/actionlint.sarif" \
-            "$SARIF_DIR/shellcheck.sarif" \
-            "$SARIF_DIR/gitleaks.sarif" \
-            "$SARIF_DIR/osv.sarif" \
-            "$SARIF_DIR/checkov.sarif" \
-            "$SARIF_DIR/trivy.sarif" \
-            "$SARIF_DIR/trufflehog.sarif" \
-            "$SARIF_DIR/zizmor.sarif" \
-            "$SARIF_DIR/hadolint.sarif" \
-            "$SARIF_DIR/tflint.sarif" \
-            "$SARIF_DIR/biome.sarif" \
-            "$SARIF_DIR/oxlint.sarif" \
+            --tool-manifest "$TOOL_MANIFEST" \
+            --sarif-dir "$SARIF_DIR" \
             -o "$SARIF_DIR/sarif.json" \
             --byte-cap "$SARIF_BYTE_CAP"
           (cd "$SARIF_DIR" && sha256sum sarif.json > sarif.json.sha256)

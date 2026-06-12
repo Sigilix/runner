@@ -4,6 +4,7 @@ import os
 import sys
 
 from sigilix_sarif_contract import KNOWN_TOOL_IDS
+from sigilix_tool_manifest import manifest_tool_specs
 
 
 SCHEMA_VERSION = 1
@@ -105,11 +106,19 @@ def _main(argv):
     parser = argparse.ArgumentParser(description="Build a Sigilix runner scan manifest.")
     parser.add_argument("--tool", action="append", default=[], help="Enabled tool as tool_id=path.")
     parser.add_argument("--disabled", action="append", default=[], help="Disabled tool id.")
+    parser.add_argument("--tool-manifest", help="Static tool manifest JSON to expand from environment toggles.")
+    parser.add_argument("--sarif-dir", help="Directory containing per-tool SARIF outputs.")
     parser.add_argument("-o", "--output", required=True)
     args = parser.parse_args(argv)
 
+    if bool(args.tool_manifest) != bool(args.sarif_dir):
+        print("--tool-manifest and --sarif-dir must be used together", file=sys.stderr)
+        return 2
+
     specs = []
     try:
+        if args.tool_manifest:
+            specs.extend(manifest_tool_specs(args.tool_manifest, args.sarif_dir, os.environ))
         specs.extend(_parse_tool_arg(value) for value in args.tool)
         for tool_id in args.disabled:
             tool_id = tool_id.strip()
