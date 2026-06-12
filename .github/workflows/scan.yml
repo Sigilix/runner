@@ -62,8 +62,18 @@ on:
         required: false
         default: true
         type: boolean
+      flake8:
+        description: "Run Sigilix-controlled Flake8 checks when a .flake8 marker is present."
+        required: false
+        default: true
+        type: boolean
       knip:
         description: "Run Knip with Sigilix-owned JavaScript and TypeScript dependency-resolution checks."
+        required: false
+        default: true
+        type: boolean
+      golangci-lint:
+        description: "Run golangci-lint with Sigilix-controlled standard Go linters."
         required: false
         default: true
         type: boolean
@@ -115,7 +125,7 @@ on:
       tflint:
         description: "Run TFLint on Terraform files and merge its SARIF."
         required: false
-        default: false
+        default: true
         type: boolean
       biome:
         description: "Run Biome on web source files and merge its SARIF."
@@ -129,6 +139,16 @@ on:
         type: boolean
       ast-grep:
         description: "Run ast-grep with Sigilix-owned JavaScript and TypeScript logic rules."
+        required: false
+        default: true
+        type: boolean
+      htmlhint:
+        description: "Run HTMLHint on HTML files with Sigilix-controlled correctness rules."
+        required: false
+        default: true
+        type: boolean
+      stylelint:
+        description: "Run Stylelint on CSS files with Sigilix-controlled correctness rules."
         required: false
         default: true
         type: boolean
@@ -191,8 +211,13 @@ jobs:
       ESLINT_PLUGIN_SECURITY_VERSION: "4.0.1"
       ESLINT_PLUGIN_UNICORN_VERSION: "65.0.1"
       ESLINT_VERSION: "10.4.1"
+      FLAKE8_VERSION: "7.3.0"
       GITLEAKS_VERSION: "8.21.2"
+      GOLANGCI_LINT_LINUX_AMD64_SHA256: "8df580d2670fed8fa984aac0507099af8df275e665215f5c7a2ae3943893a553"
+      GOLANGCI_LINT_VERSION: "2.12.2"
       HADOLINT_VERSION: "2.14.0"
+      HTMLHINT_NPM_INTEGRITY: "sha512-PweWSPA1Pb+AVFIOSpIGu5KhLdmtk/uf/0CpjvrDf6XUWmdTyqUljlylwSxQ0AWLvPGcBxK2n8uISsI4lCOkBQ=="
+      HTMLHINT_VERSION: "1.9.2"
       KNIP_VERSION: "6.16.1"
       MARKDOWNLINT_VERSION: "0.48.0"
       NODE_VERSION: "22.13.0"
@@ -206,6 +231,9 @@ jobs:
       SARIF_BYTE_CAP: ${{ inputs.sarif-byte-cap }}
       SEMGREP_VERSION: "1.166.0"
       SHELLCHECK_VERSION: "0.11.0"
+      STYLELINT_NPM_INTEGRITY: "sha512-KIlzWXMHUvgfPUR0R7TK3H80yCIi0uoivUwf+6Az4yrHJD1Q3c1qIkh/H5Z0i/K3QXgtq/UMEkWyBUSUwnpnOg=="
+      STYLELINT_VERSION: "17.12.0"
+      TFLINT_LINUX_AMD64_SHA256: "8441a7d97df20431f19c9b9d27ff4c63e308c964e86660bc7cc0cf7bbe0725e8"
       TFLINT_VERSION: "0.63.1"
       TRIVY_VERSION: "0.71.0"
       TRUFFLEHOG_VERSION: "3.95.5"
@@ -304,12 +332,26 @@ jobs:
           cd "$SOURCE_DIR"
           bash "$RUNNER_DIR/.github/scripts/run_pylint.sh"
 
+      - name: Run Flake8 to SARIF
+        if: ${{ inputs.flake8 }}
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          bash "$RUNNER_DIR/.github/scripts/run_flake8.sh"
+
       - name: Run Knip to SARIF
         if: ${{ inputs.knip }}
         run: |
           set -euo pipefail
           cd "$SOURCE_DIR"
           bash "$RUNNER_DIR/.github/scripts/run_knip.sh"
+
+      - name: Run golangci-lint to SARIF
+        if: ${{ inputs.golangci-lint }}
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          bash "$RUNNER_DIR/.github/scripts/run_golangci_lint.sh"
 
       - name: Run actionlint to SARIF
         if: ${{ inputs.actionlint }}
@@ -668,33 +710,7 @@ jobs:
         run: |
           set -euo pipefail
           cd "$SOURCE_DIR"
-          raw="$SARIF_DIR/tflint.raw.sarif"
-          out="$SARIF_DIR/tflint.sarif"
-          if ! curl -fsSL -o "$RUNNER_TEMP/tflint.zip" \
-            "https://github.com/terraform-linters/tflint/releases/download/v${TFLINT_VERSION}/tflint_linux_amd64.zip"; then
-            echo "::warning::tflint download failed - manifest will record missing output."
-          else
-            if ! unzip -q -o "$RUNNER_TEMP/tflint.zip" -d "$RUNNER_TEMP"; then
-              echo "::warning::tflint unzip failed - manifest will record missing output."
-            else
-              files_list="$RUNNER_TEMP/tflint-files"
-              if ! find . -type f -name '*.tf' \
-                -not -path './.git/*' -not -path './node_modules/*' -print0 > "$files_list"; then
-                echo "::warning::tflint file discovery failed - manifest will record missing output."
-              else
-                mapfile -d '' files < "$files_list"
-                if [ "${#files[@]}" -eq 0 ]; then
-                  printf '{"version":"2.1.0","runs":[]}' > "$raw"
-                else
-                  "$RUNNER_TEMP/tflint" --recursive --format sarif > "$raw" || true
-                  if [ ! -s "$raw" ]; then printf '{"version":"2.1.0","runs":[]}' > "$raw"; fi
-                fi
-                python3 "$RUNNER_DIR/.github/scripts/sigilix_sarif_contract.py" \
-                  tflint "$raw" "$out" --cap "$RESULT_CAP" --ensure-run \
-                  || echo "::warning::tflint SARIF normalization failed - manifest will record missing output."
-              fi
-            fi
-          fi
+          bash "$RUNNER_DIR/.github/scripts/run_tflint.sh"
 
       - name: Run Biome to SARIF
         if: ${{ inputs.biome }}
@@ -828,6 +844,20 @@ jobs:
           cd "$SOURCE_DIR"
           bash "$RUNNER_DIR/.github/scripts/run_ast_grep.sh"
 
+      - name: Run HTMLHint to SARIF
+        if: ${{ inputs.htmlhint }}
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          bash "$RUNNER_DIR/.github/scripts/run_htmlhint.sh"
+
+      - name: Run Stylelint to SARIF
+        if: ${{ inputs.stylelint }}
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          bash "$RUNNER_DIR/.github/scripts/run_stylelint.sh"
+
       - name: Build scan manifest
         env:
           SEMGREP_ENABLED: ${{ inputs.semgrep }}
@@ -835,7 +865,9 @@ jobs:
           TSC_ENABLED: ${{ inputs.tsc }}
           RUFF_ENABLED: ${{ inputs.ruff }}
           PYLINT_ENABLED: ${{ inputs.pylint }}
+          FLAKE8_ENABLED: ${{ inputs.flake8 }}
           KNIP_ENABLED: ${{ inputs.knip }}
+          GOLANGCI_LINT_ENABLED: ${{ inputs.golangci-lint }}
           ACTIONLINT_ENABLED: ${{ inputs.actionlint }}
           SHELLCHECK_ENABLED: ${{ inputs.shellcheck }}
           GITLEAKS_ENABLED: ${{ inputs.gitleaks }}
@@ -849,6 +881,8 @@ jobs:
           BIOME_ENABLED: ${{ inputs.biome }}
           OXLINT_ENABLED: ${{ inputs.oxlint }}
           AST_GREP_ENABLED: ${{ inputs.ast-grep }}
+          HTMLHINT_ENABLED: ${{ inputs.htmlhint }}
+          STYLELINT_ENABLED: ${{ inputs.stylelint }}
           YAMLLINT_ENABLED: ${{ inputs.yamllint }}
           MARKDOWNLINT_ENABLED: ${{ inputs.markdownlint }}
           DOTENV_LINTER_ENABLED: ${{ inputs.dotenv-linter }}

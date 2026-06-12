@@ -1,0 +1,8 @@
+{
+  "rules": {
+    "block-no-empty": true,
+    "declaration-block-no-duplicate-properties": true,
+    "property-no-unknown": true,
+    "selector-type-no-unknown": true
+  }
+}

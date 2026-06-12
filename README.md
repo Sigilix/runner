@@ -23,7 +23,9 @@ Current staged catalog:
 | TypeScript Compiler | on | Converts `tsc --noEmit` diagnostics to SARIF when TypeScript configs are present. Bare external dependency-resolution noise is filtered, path-like unresolved imports stay visible as review signal, and declaration-file library checks are skipped to keep dependency noise bounded. |
 | Ruff | on | Native SARIF with Sigilix metadata. |
 | Pylint | on | Converts Pylint JSON output to SARIF. Uses a Sigilix-owned high-confidence profile: Pylint fatal/error checks only, with caller config ignored and dependency-sensitive `import-error`/`no-member` disabled. |
+| Flake8 | on | Converts Flake8 text output to SARIF when a `.flake8` marker is present. The config content is ignored; Sigilix runs high-confidence PyFlakes/parse checks only to avoid duplicating broad Ruff/Pylint style feedback. |
 | Knip | on | Converts Knip JSON output to SARIF. Uses a Sigilix-owned JavaScript/TypeScript profile for unresolved imports, unlisted dependencies, and missing package-script binaries; broad unused-export/file reports are not enabled. |
+| golangci-lint | on | Native SARIF with Sigilix metadata for Go repositories. Uses a runner-controlled standard linter profile and skips caller golangci config/plugins. |
 | actionlint | on | Converts actionlint JSON to SARIF for GitHub Actions workflows. |
 | ShellCheck | on | Converts ShellCheck `json1` output to SARIF. |
 | YAMLlint | on | Converts YAMLlint parsable output to SARIF with relaxed defaults for config feedback. |
@@ -37,10 +39,12 @@ Current staged catalog:
 | TruffleHog | off | Converts TruffleHog JSON output to SARIF. Secret verification is disabled in CI to avoid provider calls with discovered credentials; unverified or unverifiable hits are warning-level and metadata-only duplicates are collapsed without comparing secret values. |
 | zizmor | on | Native SARIF with Sigilix metadata for GitHub Actions security scanning. |
 | Hadolint | on | Native SARIF with Sigilix metadata for Dockerfile linting. |
-| TFLint | off | Native SARIF with Sigilix metadata. Opt-in Terraform linting. |
+| TFLint | on | Native SARIF with Sigilix metadata. Runs only when Terraform files are present. |
 | Biome | on | Native SARIF with Sigilix metadata. Default-on Sigilix-controlled correctness linting for JS/TS and JSON; uses runner-owned config, bypasses caller ignore files, and skips common generated-output directories. |
 | Oxlint | on | Native SARIF with Sigilix metadata. Default-on Sigilix-controlled correctness linting for JavaScript and TypeScript; uses runner-owned config, disables caller Oxlint config and ignore files, skips common generated-output directories, and checks pinned npm package integrity before scanning. |
 | ast-grep | on | Native SARIF with Sigilix metadata. Default-on Sigilix-owned AST rules for high-confidence JavaScript and TypeScript async array logic bugs; verified npm tarballs are installed without package scripts before scanning. Caller ignore files are bypassed; common generated and vendor directories are still excluded. |
+| HTMLHint | on | Native SARIF with Sigilix metadata for HTML files. Uses runner-owned structural correctness rules, verifies the pinned npm tarball, and skips common generated-output directories. |
+| Stylelint | on | Converts Stylelint JSON output to SARIF for CSS files. Uses runner-owned correctness rules, verifies the pinned npm tarball, and skips common generated-output directories. |
 
 > **SIG-107:** `oxlint` now defaults to `true`. Set `oxlint: false` (boolean) in the caller workflow to suppress it.
 > `biome` now defaults to `true`. Set `biome: false` (boolean) in the caller workflow to suppress it.
@@ -48,6 +52,8 @@ Current staged catalog:
 > `pylint` now defaults to `true`. Set `pylint: false` (boolean) in the caller workflow to suppress it.
 > `knip` now defaults to `true`. Set `knip: false` (boolean) in the caller workflow to suppress it.
 > `tsc` now defaults to `true`. Set `tsc: false` (boolean) in the caller workflow to suppress it.
+> `flake8`, `golangci-lint`, `htmlhint`, `stylelint`, and `tflint` now default to `true`.
+> Set the matching boolean input to `false` in the caller workflow to suppress one of them.
 > `markdownlint`, `dotenv-linter`, and `checkmake` now default to `true`. Set the matching
 > boolean input to `false` in the caller workflow to suppress one of them.
 
@@ -89,9 +95,10 @@ a moving ref cannot prove which version of the runner ran.
 
 Default-on tool booleans: `semgrep`, `eslint`, `ruff`, `actionlint`, `shellcheck`, `yamllint`,
 `markdownlint`, `dotenv-linter`, `checkmake`, `gitleaks`, `osv-scanner`, `zizmor`, `hadolint`,
-`biome`, `oxlint`, `ast-grep`, `pylint`, `knip`, and `tsc`.
+`biome`, `oxlint`, `ast-grep`, `pylint`, `flake8`, `knip`, `golangci-lint`, `htmlhint`,
+`stylelint`, `tflint`, and `tsc`.
 
-Default-off opt-in tool booleans: `checkov`, `trivy`, `trufflehog`, and `tflint`.
+Default-off opt-in tool booleans: `checkov`, `trivy`, and `trufflehog`.
 
 Other useful inputs:
 

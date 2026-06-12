@@ -76,7 +76,13 @@ else
       echo "::warning::TypeScript package download failed - emitting empty TypeScript SARIF run."
       tsc_can_scan=false
     else
-      tsc_package="$tsc_install_dir/${tsc_package##*/}"
+      package_name="${tsc_package##*/}"
+      if [[ ! "$package_name" =~ ^typescript-[0-9]+[.][0-9]+[.][0-9]+[.]tgz$ ]]; then
+        echo "::warning::TypeScript package download returned an unexpected filename - emitting empty TypeScript SARIF run."
+        tsc_can_scan=false
+      else
+        tsc_package="$tsc_install_dir/$package_name"
+      fi
     fi
 
     if [ "$tsc_can_scan" = true ] && [ ! -f "$tsc_package" ]; then
@@ -84,6 +90,7 @@ else
       tsc_can_scan=false
     elif [ "$tsc_can_scan" = true ] && ! verify_package_integrity "$tsc_package"; then
       echo "::warning::TypeScript package integrity mismatch - emitting empty TypeScript SARIF run."
+      rm -f "$tsc_package"
       tsc_can_scan=false
     elif [ "$tsc_can_scan" = true ] && ! npm install --silent --prefix "$tsc_install_dir" --ignore-scripts --omit=optional \
       --registry=https://registry.npmjs.org --no-audit --no-fund \

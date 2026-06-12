@@ -26,9 +26,19 @@
       "output": "pylint.sarif"
     },
     {
+      "id": "flake8",
+      "env": "FLAKE8_ENABLED",
+      "output": "flake8.sarif"
+    },
+    {
       "id": "knip",
       "env": "KNIP_ENABLED",
       "output": "knip.sarif"
+    },
+    {
+      "id": "golangci-lint",
+      "env": "GOLANGCI_LINT_ENABLED",
+      "output": "golangci-lint.sarif"
     },
     {
       "id": "actionlint",
@@ -94,6 +104,16 @@
       "id": "ast-grep",
       "env": "AST_GREP_ENABLED",
       "output": "ast-grep.sarif"
+    },
+    {
+      "id": "htmlhint",
+      "env": "HTMLHINT_ENABLED",
+      "output": "htmlhint.sarif"
+    },
+    {
+      "id": "stylelint",
+      "env": "STYLELINT_ENABLED",
+      "output": "stylelint.sarif"
     },
     {
       "id": "yamllint",
