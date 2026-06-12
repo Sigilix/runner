@@ -60,13 +60,26 @@ else
     echo "::warning::Pylint install failed - emitting empty Pylint SARIF run."
     emit_empty_json
   else
-    if ! installed_version="$("$pylint_python" -m pylint --version 2>/dev/null | sed -n '1s/^pylint //p')"; then
+    should_run_pylint=false
+    if ! version_output="$("$pylint_python" -m pylint --version 2>/dev/null)"; then
       echo "::warning::Pylint version check failed - emitting empty Pylint SARIF run."
       emit_empty_json
-    elif [ "$installed_version" != "$PYLINT_VERSION" ]; then
-      echo "::warning::Pylint installed version mismatch - emitting empty Pylint SARIF run."
-      emit_empty_json
-    elif ! "$pylint_python" -m pylint \
+    else
+      version_output="${version_output%%$'\n'*}"
+      if [[ ! "$version_output" =~ ^pylint[[:space:]]+([0-9]+[.][0-9]+[.][0-9]+)([^0-9.]|$) ]]; then
+        echo "::warning::Pylint version check failed - emitting empty Pylint SARIF run."
+        emit_empty_json
+      else
+        installed_version="${BASH_REMATCH[1]}"
+        if [ "$installed_version" != "$PYLINT_VERSION" ]; then
+          echo "::warning::Pylint installed version mismatch - emitting empty Pylint SARIF run."
+          emit_empty_json
+        else
+          should_run_pylint=true
+        fi
+      fi
+    fi
+    if [ "$should_run_pylint" = true ] && ! "$pylint_python" -m pylint \
       --rcfile=/dev/null \
       --output-format=json \
       --disable=all \
