@@ -424,18 +424,22 @@ class SigilixScanManifestTest(unittest.TestCase):
         self.assertEqual(manifest["tools"][0]["status"], "invalid-output")
         self.assertEqual(manifest["summary"], {"enabled": 1, "produced": 0, "empty": 0, "missing": 0, "invalid": 1})
 
-    def test_manifest_records_next_batch_missing_outputs(self):
+    def test_manifest_records_missing_outputs_for_enabled_tools(self):
+        expected_outputs = {
+            **NEXT_BATCH_TOOL_OUTPUTS,
+            **LANGUAGE_SARIF_TOOL_OUTPUTS,
+            **CONFIG_TOOL_OUTPUTS,
+            **CI_SECURITY_TOOL_OUTPUTS,
+        }
         with tempfile.TemporaryDirectory() as tmpdir:
             manifest = build_scan_manifest(
                 [
                     (tool_id, True, os.path.join(tmpdir, f"{tool_id}.sarif"))
-                    for tool_id in {**NEXT_BATCH_TOOL_OUTPUTS, **LANGUAGE_SARIF_TOOL_OUTPUTS, **CONFIG_TOOL_OUTPUTS}
+                    for tool_id in expected_outputs
                 ]
             )
 
-        expected = {
-            tool_id: "missing-output" for tool_id in {**NEXT_BATCH_TOOL_OUTPUTS, **LANGUAGE_SARIF_TOOL_OUTPUTS, **CONFIG_TOOL_OUTPUTS}
-        }
+        expected = {tool_id: "missing-output" for tool_id in expected_outputs}
         self.assertEqual({tool["toolId"]: tool["status"] for tool in manifest["tools"]}, expected)
         self.assertEqual(
             manifest["summary"],
@@ -465,7 +469,6 @@ NEXT_BATCH_TOOL_OUTPUTS = {
     "checkov": "checkov.sarif",
     "trivy": "trivy.sarif",
     "trufflehog": "trufflehog.sarif",
-    "zizmor": "zizmor.sarif",
     "hadolint": "hadolint.sarif",
     "tflint": "tflint.sarif",
 }
@@ -479,6 +482,10 @@ CONFIG_TOOL_OUTPUTS = {
     "yamllint": "yamllint.sarif",
 }
 
+CI_SECURITY_TOOL_OUTPUTS = {
+    "zizmor": "zizmor.sarif",
+}
+
 ALL_TOOL_OUTPUTS = {
     "semgrep": "semgrep.sarif",
     "eslint": "eslint.sarif",
@@ -490,6 +497,7 @@ ALL_TOOL_OUTPUTS = {
     **NEXT_BATCH_TOOL_OUTPUTS,
     **LANGUAGE_SARIF_TOOL_OUTPUTS,
     **CONFIG_TOOL_OUTPUTS,
+    **CI_SECURITY_TOOL_OUTPUTS,
 }
 
 
@@ -498,6 +506,12 @@ class SigilixWorkflowContractTest(unittest.TestCase):
         path = os.path.join(os.path.dirname(__file__), "..", "workflows", "scan.yml")
         with open(path, "r", encoding="utf-8") as handle:
             return handle.read()
+
+    def workflow_input_block(self, input_name):
+        pattern = rf"\n      {re.escape(input_name)}:\n(?P<block>(?:        .+\n)+)"
+        match = re.search(pattern, self.workflow_text())
+        self.assertIsNotNone(match)
+        return match.group("block")
 
     def tool_manifest(self):
         return load_tool_manifest(self.tool_manifest_path())
@@ -563,6 +577,8 @@ class SigilixWorkflowContractTest(unittest.TestCase):
         self.assertFalse(legacy_tools & set(NEXT_BATCH_TOOL_OUTPUTS))
         self.assertFalse(legacy_tools & set(LANGUAGE_SARIF_TOOL_OUTPUTS))
         self.assertFalse(set(NEXT_BATCH_TOOL_OUTPUTS) & set(LANGUAGE_SARIF_TOOL_OUTPUTS))
+        self.assertNotIn("zizmor", NEXT_BATCH_TOOL_OUTPUTS)
+        self.assertIn("zizmor", CI_SECURITY_TOOL_OUTPUTS)
 
     def test_workflow_uses_static_tool_manifest_for_manifest_and_merge(self):
         text = self.workflow_text()
@@ -587,15 +603,30 @@ class SigilixWorkflowContractTest(unittest.TestCase):
         text = self.workflow_text()
         rows = {row["id"]: row for row in self.tool_manifest()}
 
-        self.assertRegex(text, r"\n      yamllint:\n(?:        .+\n)+?        default: true\n")
+        self.assertIn("        default: true\n", self.workflow_input_block("yamllint"))
         self.assertIn("YAMLLINT_ENABLED: ${{ inputs.yamllint }}", text)
         self.assertEqual(rows["yamllint"]["env"], "YAMLLINT_ENABLED")
         self.assertEqual(rows["yamllint"]["output"], "yamllint.sarif")
 
-    def test_next_batch_tool_outputs_are_manifested_and_merged(self):
+    def test_zizmor_is_default_on_for_ci_security_feedback(self):
+        text = self.workflow_text()
         rows = {row["id"]: row for row in self.tool_manifest()}
 
-        for tool_id, output_name in {**NEXT_BATCH_TOOL_OUTPUTS, **LANGUAGE_SARIF_TOOL_OUTPUTS, **CONFIG_TOOL_OUTPUTS}.items():
+        self.assertIn("        default: true\n", self.workflow_input_block("zizmor"))
+        self.assertIn("ZIZMOR_ENABLED: ${{ inputs.zizmor }}", text)
+        self.assertEqual(rows["zizmor"]["env"], "ZIZMOR_ENABLED")
+        self.assertEqual(rows["zizmor"]["output"], "zizmor.sarif")
+
+    def test_next_batch_tool_outputs_are_manifested_and_merged(self):
+        rows = {row["id"]: row for row in self.tool_manifest()}
+        expected_outputs = {
+            **NEXT_BATCH_TOOL_OUTPUTS,
+            **LANGUAGE_SARIF_TOOL_OUTPUTS,
+            **CONFIG_TOOL_OUTPUTS,
+            **CI_SECURITY_TOOL_OUTPUTS,
+        }
+
+        for tool_id, output_name in expected_outputs.items():
             env_var = tool_id.upper().replace("-", "_") + "_ENABLED"
             self.assertEqual(rows[tool_id]["env"], env_var)
             self.assertEqual(rows[tool_id]["output"], output_name)
