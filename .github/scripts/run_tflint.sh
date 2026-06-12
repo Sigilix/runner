@@ -18,7 +18,11 @@ files_list=""
 
 mkdir -p "$SARIF_DIR" "$RUNNER_TEMP"
 files_list="$(mktemp "$RUNNER_TEMP/tflint-files.XXXXXX")"
-trap 'rm -f "$files_list"' EXIT
+
+cleanup_tflint() {
+  rm -f "$files_list" "$RUNNER_TEMP/tflint.zip" "$RUNNER_TEMP/tflint"
+}
+trap cleanup_tflint EXIT
 
 emit_empty_sarif() {
   printf '{"version":"2.1.0","runs":[]}' > "$raw"

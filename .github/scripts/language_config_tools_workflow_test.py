@@ -164,6 +164,7 @@ class LanguageConfigToolsWorkflowTest(unittest.TestCase):
         self.assertIn("        default: true\n", self.workflow_input_block("tflint"))
         self.assertIn("TFLINT_ENABLED: ${{ inputs.tflint }}", text)
         self.assertIn("TFLINT_LINUX_AMD64_SHA256", script)
+        self.assertIn('rm -f "$files_list" "$RUNNER_TEMP/tflint.zip" "$RUNNER_TEMP/tflint"', script)
         self.assertIn("sha256sum -c --strict", script)
         self.assertIn("TFLint binary missing or not executable", script)
         self.assertIn("TFLint installed version mismatch", script)
