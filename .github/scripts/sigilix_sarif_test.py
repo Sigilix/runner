@@ -489,6 +489,7 @@ CONTAINER_TOOL_OUTPUTS = {
 ALL_TOOL_OUTPUTS = {
     "semgrep": "semgrep.sarif",
     "eslint": "eslint.sarif",
+    "tsc": "tsc.sarif",
     "ruff": "ruff.sarif",
     "pylint": "pylint.sarif",
     "knip": "knip.sarif",
@@ -502,7 +503,6 @@ ALL_TOOL_OUTPUTS = {
     **CI_SECURITY_TOOL_OUTPUTS,
     **CONTAINER_TOOL_OUTPUTS,
 }
-
 
 class SigilixWorkflowContractTest(unittest.TestCase):
     def workflow_text(self):

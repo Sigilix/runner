@@ -47,6 +47,11 @@ on:
         required: false
         default: "safe"
         type: string
+      tsc:
+        description: "Run TypeScript compiler no-emit diagnostics for type-aware findings."
+        required: false
+        default: true
+        type: boolean
       ruff:
         description: "Run Ruff and attach Sigilix deterministic-tool metadata."
         required: false
@@ -205,6 +210,7 @@ jobs:
       TRIVY_VERSION: "0.71.0"
       TRUFFLEHOG_VERSION: "3.95.5"
       TYPESCRIPT_ESLINT_VERSION: "8.61.0"
+      TYPESCRIPT_NPM_INTEGRITY: "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="
       TYPESCRIPT_VERSION: "6.0.3"
       YAMLLINT_VERSION: "1.37.1"
       ZIZMOR_VERSION: "1.25.2"
@@ -267,6 +273,13 @@ jobs:
           set -euo pipefail
           cd "$SOURCE_DIR"
           bash "$RUNNER_DIR/.github/scripts/run_eslint.sh"
+
+      - name: Run TypeScript compiler to SARIF
+        if: ${{ inputs.tsc }}
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          bash "$RUNNER_DIR/.github/scripts/run_tsc.sh"
 
       - name: Run Ruff to SARIF
         if: ${{ inputs.ruff }}
@@ -819,6 +832,7 @@ jobs:
         env:
           SEMGREP_ENABLED: ${{ inputs.semgrep }}
           ESLINT_ENABLED: ${{ inputs.eslint }}
+          TSC_ENABLED: ${{ inputs.tsc }}
           RUFF_ENABLED: ${{ inputs.ruff }}
           PYLINT_ENABLED: ${{ inputs.pylint }}
           KNIP_ENABLED: ${{ inputs.knip }}
