@@ -9,7 +9,6 @@ YAMLLINT_TOOL_NAME = "YAMLlint"
 YAMLLINT_TOOL_ID = "yamllint"
 YAMLLINT_INFORMATION_URI = "https://yamllint.readthedocs.io/"
 PARSABLE_RE = re.compile(r"^(.+):(\d+):(\d+): \[(error|warning)\] (.+)$")
-RULE_RE = re.compile(r"^(.*) \(([^()]+)\)$")
 
 
 def convert_yamllint_output(text, base_dir=".", cap=None):
@@ -27,11 +26,16 @@ def _parse_line(line, base_dir="."):
         return None
 
     path, line_number, column, level, message = match.groups()
-    rule_id = "yamllint"
-    rule_match = RULE_RE.match(message)
-    if rule_match is not None:
-        message, rule_id = rule_match.groups()
+    message, rule_id = _split_message_rule(message)
     return make_result(rule_id, level, message, path, line=int(line_number), column=int(column), base_dir=base_dir)
+
+
+def _split_message_rule(message):
+    parts = message.rsplit(" (", 1)
+    if len(parts) != 2 or not parts[1].endswith(")") or "(" in parts[1]:
+        return message, "yamllint"
+    rule_id = parts[1][:-1]
+    return (parts[0], rule_id) if rule_id else (message, "yamllint")
 
 
 def _main(argv):
