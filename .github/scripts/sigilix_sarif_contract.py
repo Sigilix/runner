@@ -8,9 +8,11 @@ SIGILIX_SOURCE = "deterministic-tool"
 KNOWN_TOOL_IDS = frozenset(
     {
         "semgrep",
+        "opengrep",
         "eslint",
         "tsc",
         "ruff",
+        "brakeman",
         "pylint",
         "flake8",
         "knip",
@@ -39,9 +41,11 @@ KNOWN_TOOL_IDS = frozenset(
 )
 DEFAULT_TOOL_NAMES = {
     "semgrep": "Semgrep",
+    "opengrep": "OpenGrep",
     "eslint": "ESLint",
     "tsc": "TypeScript Compiler",
     "ruff": "Ruff",
+    "brakeman": "Brakeman",
     "pylint": "Pylint",
     "flake8": "Flake8",
     "knip": "Knip",

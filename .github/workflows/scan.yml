@@ -37,6 +37,16 @@ on:
         required: false
         default: "auto"
         type: string
+      opengrep:
+        description: "Run OpenGrep and attach Sigilix deterministic-tool metadata."
+        required: false
+        default: true
+        type: boolean
+      opengrep-config:
+        description: "Comma-separated OpenGrep rulesets passed as --config values."
+        required: false
+        default: "p/security-audit,p/owasp-top-ten"
+        type: string
       eslint:
         description: "Run ESLint. Safe mode avoids repository config/plugins."
         required: false
@@ -54,6 +64,11 @@ on:
         type: boolean
       ruff:
         description: "Run Ruff and attach Sigilix deterministic-tool metadata."
+        required: false
+        default: true
+        type: boolean
+      brakeman:
+        description: "Run Brakeman on detected Rails applications and merge its SARIF."
         required: false
         default: true
         type: boolean
@@ -205,7 +220,9 @@ jobs:
       AST_GREP_LINUX_X64_GNU_INTEGRITY: "sha512-r/o9Mag6OZmGevY9OJjatuUKDOX1rSvgo29qSfxpMbIciiH3hkzEW/2w1xTPZI8xnM7iC+k+CkGoknmoXVTYGg=="
       AST_GREP_NPM_INTEGRITY: "sha512-DGi6xXAOBJubGg9QWqTeW8PzKSGHWEOa3uxXspEfYf532yb3lHmNJAcKMl1d+O9Xs9bTcNeDLC8se+O+tirEFQ=="
       AST_GREP_VERSION: "0.43.0"
+      BRAKEMAN_GEM_SHA256: "7bf921fa9638544835df9aa7b3e720a9a72c0267f34f92135955edd80d4dcf6f"
       BIOME_VERSION: "2.4.16"
+      BRAKEMAN_VERSION: "8.0.4"
       CHECKMAKE_LINUX_AMD64_SHA256: "e2effb876913f3ee2caef0ba35f6202c5e8a3cd55a077d8d2b9ce2034257b6af"
       CHECKMAKE_VERSION: "0.3.2"
       CHECKOV_VERSION: "3.3.1"
@@ -226,11 +243,16 @@ jobs:
       KNIP_VERSION: "6.16.1"
       MARKDOWNLINT_VERSION: "0.48.0"
       NODE_VERSION: "22.13.0"
+      OPENGREP_MANYLINUX_AARCH64_SHA256: "8df71670e20336646687c6f4ddf9b4532f1a7fcd8a8ea7bfa4ea46747f61e088"
+      OPENGREP_MANYLINUX_X86_SHA256: "45bcd58440e397ed52c50e953ccf5948909ea77087c9186fc7d277216f62e319"
+      OPENGREP_VERSION: "1.22.0"
       OSV_SCANNER_VERSION: "2.3.8"
       OXLINT_LINUX_X64_GNU_INTEGRITY: "sha512-Gt3KHgp46mRKz4sJeaASmKvD8ayXookRw07RMf+NowhEztGGDZ7VrXpoW96XuKJLjFukWizOFVNjmYb/u7caNQ=="
       OXLINT_NPM_INTEGRITY: "sha512-ypZkK/aDc5NQV8zIR6s2H2Tl3aNW8FmJ1m9+2qsaYuRenl8vgnHNCGwTHviWJdUQzglOlHFchgopdtGhSy17Rw=="
       OXLINT_VERSION: "1.69.0"
       PYLINT_VERSION: "4.0.5"
+      RACC_GEM_SHA256: "4a7f6929691dbec8b5209a0b373bc2614882b55fc5d2e447a21aaa691303d62f"
+      RACC_VERSION: "1.8.1"
       REGAL_LINUX_X86_64_SHA256: "6769dcd8e88bc5ba5ff4fac500e4a99d55b3eec3d1d0842833d84f6820a2a80f"
       REGAL_VERSION: "0.41.1"
       RESULT_CAP: ${{ inputs.result-cap }}
@@ -300,6 +322,15 @@ jobs:
           python3 "$RUNNER_DIR/.github/scripts/sigilix_sarif_contract.py" \
             semgrep "$raw" "$out" --cap "$RESULT_CAP" --ensure-run
 
+      - name: Run OpenGrep to SARIF
+        if: ${{ inputs.opengrep }}
+        env:
+          OPENGREP_CONFIG: ${{ inputs.opengrep-config }}
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          bash "$RUNNER_DIR/.github/scripts/run_opengrep.sh"
+
       - name: Run ESLint to SARIF
         if: ${{ inputs.eslint }}
         env:
@@ -331,6 +362,13 @@ jobs:
           if [ ! -s "$raw" ]; then printf '{"version":"2.1.0","runs":[]}' > "$raw"; fi
           python3 "$RUNNER_DIR/.github/scripts/sigilix_sarif_contract.py" \
             ruff "$raw" "$out" --cap "$RESULT_CAP" --ensure-run
+
+      - name: Run Brakeman to SARIF
+        if: ${{ inputs.brakeman }}
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          bash "$RUNNER_DIR/.github/scripts/run_brakeman.sh"
 
       - name: Run Pylint to SARIF
         if: ${{ inputs.pylint }}
@@ -835,9 +873,11 @@ jobs:
       - name: Build scan manifest
         env:
           SEMGREP_ENABLED: ${{ inputs.semgrep }}
+          OPENGREP_ENABLED: ${{ inputs.opengrep }}
           ESLINT_ENABLED: ${{ inputs.eslint }}
           TSC_ENABLED: ${{ inputs.tsc }}
           RUFF_ENABLED: ${{ inputs.ruff }}
+          BRAKEMAN_ENABLED: ${{ inputs.brakeman }}
           PYLINT_ENABLED: ${{ inputs.pylint }}
           FLAKE8_ENABLED: ${{ inputs.flake8 }}
           KNIP_ENABLED: ${{ inputs.knip }}

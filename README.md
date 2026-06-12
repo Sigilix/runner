@@ -19,9 +19,11 @@ Current staged catalog:
 | Tool | Default | Notes |
 | --- | --- | --- |
 | Semgrep | on | Native SARIF with Sigilix metadata. `semgrep-config` defaults to `auto`. |
+| OpenGrep | on | Native SARIF with Sigilix metadata. `opengrep-config` defaults to `p/security-audit,p/owasp-top-ten`. |
 | ESLint | on | Safe mode by default: no repository config or plugins. Uses Sigilix-owned JavaScript/TypeScript logic, promise, and security rules; typed TypeScript promise rules turn on when a TS config is detected. Use `eslint-mode: repo-config` only when you accept executing the caller repository's ESLint config/plugins in the scan job. |
 | TypeScript Compiler | on | Converts `tsc --noEmit` diagnostics to SARIF when TypeScript configs are present. Bare external dependency-resolution noise is filtered, path-like unresolved imports stay visible as review signal, and declaration-file library checks are skipped to keep dependency noise bounded. |
 | Ruff | on | Native SARIF with Sigilix metadata. |
+| Brakeman | on | Native SARIF with Sigilix metadata for detected Rails applications. Caller Brakeman config and ignore files are bypassed so ignored warnings still reach review evidence. |
 | Pylint | on | Converts Pylint JSON output to SARIF. Uses a Sigilix-owned high-confidence profile: Pylint fatal/error checks only, with caller config ignored and dependency-sensitive `import-error`/`no-member` disabled. |
 | Flake8 | on | Converts Flake8 text output to SARIF when a `.flake8` marker is present. The config content is ignored; Sigilix runs high-confidence PyFlakes/parse checks only to avoid duplicating broad Ruff/Pylint style feedback. |
 | Knip | on | Converts Knip JSON output to SARIF. Uses a Sigilix-owned JavaScript/TypeScript profile for unresolved imports, unlisted dependencies, and missing package-script binaries; broad unused-export/file reports are not enabled. |
@@ -58,6 +60,8 @@ Current staged catalog:
 > `markdownlint`, `dotenv-linter`, and `checkmake` now default to `true`. Set the matching
 > boolean input to `false` in the caller workflow to suppress one of them.
 > `regal` now defaults to `true`. Set `regal: false` (boolean) in the caller workflow to suppress it.
+> `opengrep` and `brakeman` now default to `true`. Set the matching boolean input to `false`
+> to suppress one of them; `opengrep-config` accepts comma-separated OpenGrep rulesets.
 
 These SIG-107 slices move the runner toward broader third-party tool parity. The Sigilix
 metadata contract is currently attached to every listed tool.
@@ -98,7 +102,7 @@ a moving ref cannot prove which version of the runner ran.
 Default-on tool booleans: `semgrep`, `eslint`, `ruff`, `actionlint`, `shellcheck`, `yamllint`,
 `markdownlint`, `dotenv-linter`, `checkmake`, `gitleaks`, `osv-scanner`, `zizmor`, `hadolint`,
 `biome`, `oxlint`, `ast-grep`, `pylint`, `flake8`, `knip`, `golangci-lint`, `htmlhint`,
-`stylelint`, `tflint`, `regal`, and `tsc`.
+`stylelint`, `tflint`, `regal`, `opengrep`, `brakeman`, and `tsc`.
 
 Default-off opt-in tool booleans: `checkov`, `trivy`, and `trufflehog`.
 
@@ -107,6 +111,7 @@ Other useful inputs:
 | Input | Default | Meaning |
 | --- | --- | --- |
 | `semgrep-config` | `auto` | Ruleset passed to `semgrep --config`. |
+| `opengrep-config` | `p/security-audit,p/owasp-top-ten` | Comma-separated rulesets passed to OpenGrep as repeated `--config` values. |
 | `eslint-mode` | `safe` | `safe` avoids repository config/plugins; `repo-config` opts in to the caller's ESLint config and plugins, which execute in the no-OIDC scan job. |
 | `result-cap` | `500` | Maximum kept findings per Sigilix-managed tool run. Dropped counts are stored in SARIF metadata. |
 | `sarif-byte-cap` | `7800000` | Maximum merged SARIF payload bytes before later runs are dropped. |
