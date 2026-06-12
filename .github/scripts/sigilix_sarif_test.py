@@ -430,6 +430,7 @@ class SigilixScanManifestTest(unittest.TestCase):
             **LANGUAGE_SARIF_TOOL_OUTPUTS,
             **CONFIG_TOOL_OUTPUTS,
             **CI_SECURITY_TOOL_OUTPUTS,
+            **CONTAINER_TOOL_OUTPUTS,
         }
         with tempfile.TemporaryDirectory() as tmpdir:
             manifest = build_scan_manifest(
@@ -469,7 +470,6 @@ NEXT_BATCH_TOOL_OUTPUTS = {
     "checkov": "checkov.sarif",
     "trivy": "trivy.sarif",
     "trufflehog": "trufflehog.sarif",
-    "hadolint": "hadolint.sarif",
     "tflint": "tflint.sarif",
 }
 
@@ -486,6 +486,10 @@ CI_SECURITY_TOOL_OUTPUTS = {
     "zizmor": "zizmor.sarif",
 }
 
+CONTAINER_TOOL_OUTPUTS = {
+    "hadolint": "hadolint.sarif",
+}
+
 ALL_TOOL_OUTPUTS = {
     "semgrep": "semgrep.sarif",
     "eslint": "eslint.sarif",
@@ -498,6 +502,7 @@ ALL_TOOL_OUTPUTS = {
     **LANGUAGE_SARIF_TOOL_OUTPUTS,
     **CONFIG_TOOL_OUTPUTS,
     **CI_SECURITY_TOOL_OUTPUTS,
+    **CONTAINER_TOOL_OUTPUTS,
 }
 
 
@@ -579,6 +584,8 @@ class SigilixWorkflowContractTest(unittest.TestCase):
         self.assertFalse(set(NEXT_BATCH_TOOL_OUTPUTS) & set(LANGUAGE_SARIF_TOOL_OUTPUTS))
         self.assertNotIn("zizmor", NEXT_BATCH_TOOL_OUTPUTS)
         self.assertIn("zizmor", CI_SECURITY_TOOL_OUTPUTS)
+        self.assertNotIn("hadolint", NEXT_BATCH_TOOL_OUTPUTS)
+        self.assertIn("hadolint", CONTAINER_TOOL_OUTPUTS)
 
     def test_workflow_uses_static_tool_manifest_for_manifest_and_merge(self):
         text = self.workflow_text()
@@ -617,13 +624,25 @@ class SigilixWorkflowContractTest(unittest.TestCase):
         self.assertEqual(rows["zizmor"]["env"], "ZIZMOR_ENABLED")
         self.assertEqual(rows["zizmor"]["output"], "zizmor.sarif")
 
-    def test_next_batch_tool_outputs_are_manifested_and_merged(self):
+    def test_hadolint_is_default_on_for_dockerfile_feedback(self):
+        text = self.workflow_text()
+        rows = {row["id"]: row for row in self.tool_manifest()}
+
+        self.assertIn("        default: true\n", self.workflow_input_block("hadolint"))
+        self.assertIn("- name: Run Hadolint to SARIF", text)
+        self.assertIn("if: ${{ inputs.hadolint }}", text)
+        self.assertIn("HADOLINT_ENABLED: ${{ inputs.hadolint }}", text)
+        self.assertEqual(rows["hadolint"]["env"], "HADOLINT_ENABLED")
+        self.assertEqual(rows["hadolint"]["output"], "hadolint.sarif")
+
+    def test_catalog_tool_outputs_are_manifested_and_merged(self):
         rows = {row["id"]: row for row in self.tool_manifest()}
         expected_outputs = {
             **NEXT_BATCH_TOOL_OUTPUTS,
             **LANGUAGE_SARIF_TOOL_OUTPUTS,
             **CONFIG_TOOL_OUTPUTS,
             **CI_SECURITY_TOOL_OUTPUTS,
+            **CONTAINER_TOOL_OUTPUTS,
         }
 
         for tool_id, output_name in expected_outputs.items():
