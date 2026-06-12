@@ -24,6 +24,9 @@ Current staged catalog:
 | actionlint | on | Converts actionlint JSON to SARIF for GitHub Actions workflows. |
 | ShellCheck | on | Converts ShellCheck `json1` output to SARIF. |
 | YAMLlint | on | Converts YAMLlint parsable output to SARIF with relaxed defaults for config feedback. |
+| markdownlint | on | Converts markdownlint JSON output to SARIF with Sigilix-controlled structural Markdown rules. |
+| dotenv-linter | on | Converts dotenv-linter plain output to SARIF for `.env` file hygiene; assignment values are redacted during conversion. |
+| checkmake | on | Converts checkmake JSON output to SARIF for Makefiles using runner-owned low-noise rules. |
 | gitleaks | on | Native SARIF with Sigilix metadata. |
 | osv-scanner | on | Native SARIF with Sigilix metadata. |
 | Checkov | off | Native SARIF with Sigilix metadata. Opt-in IaC scanning. |
@@ -37,6 +40,8 @@ Current staged catalog:
 
 > **SIG-107:** `oxlint` now defaults to `true`. Set `oxlint: false` (boolean) in the caller workflow to suppress it.
 > `biome` now defaults to `true`. Set `biome: false` (boolean) in the caller workflow to suppress it.
+> `markdownlint`, `dotenv-linter`, and `checkmake` now default to `true`. Set the matching
+> boolean input to `false` in the caller workflow to suppress one of them.
 
 These SIG-107 slices move the runner toward broader third-party tool parity. The Sigilix
 metadata contract is currently attached to every listed tool.
@@ -75,7 +80,8 @@ a moving ref cannot prove which version of the runner ran.
 ### Inputs
 
 Default-on tool booleans: `semgrep`, `eslint`, `ruff`, `actionlint`, `shellcheck`, `yamllint`,
-`gitleaks`, `osv-scanner`, `zizmor`, `hadolint`, `biome`, and `oxlint`.
+`markdownlint`, `dotenv-linter`, `checkmake`, `gitleaks`, `osv-scanner`, `zizmor`, `hadolint`,
+`biome`, and `oxlint`.
 
 Default-off opt-in tool booleans: `checkov`, `trivy`, `trufflehog`, and `tflint`.
 

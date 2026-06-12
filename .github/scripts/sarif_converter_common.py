@@ -75,6 +75,8 @@ def normalize_path(path, base_dir="."):
     text = text.replace(os.sep, "/").replace("\\", "/")
     if text.startswith("./"):
         text = text[2:]
+    if text:
+        text = os.path.normpath(text).replace(os.sep, "/").replace("\\", "/")
     if text == "" or text == ".." or text.startswith("../"):
         return os.path.basename(text) or "."
     return text

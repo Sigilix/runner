@@ -117,6 +117,21 @@ on:
         required: false
         default: true
         type: boolean
+      markdownlint:
+        description: "Run markdownlint on Markdown files with Sigilix-controlled correctness rules."
+        required: false
+        default: true
+        type: boolean
+      dotenv-linter:
+        description: "Run dotenv-linter on .env files and merge its SARIF."
+        required: false
+        default: true
+        type: boolean
+      checkmake:
+        description: "Run checkmake on Makefiles and merge its SARIF."
+        required: false
+        default: true
+        type: boolean
       result-cap:
         description: "Maximum findings kept per Sigilix-managed deterministic tool run."
         required: false
@@ -143,10 +158,15 @@ jobs:
     env:
       ACTIONLINT_VERSION: "1.7.12"
       BIOME_VERSION: "2.4.16"
+      CHECKMAKE_LINUX_AMD64_SHA256: "e2effb876913f3ee2caef0ba35f6202c5e8a3cd55a077d8d2b9ce2034257b6af"
+      CHECKMAKE_VERSION: "0.3.2"
       CHECKOV_VERSION: "3.3.1"
+      DOTENV_LINTER_LINUX_X86_64_SHA256: "9e2f1f6eb88a71ac15ef209f78f5a68644db82f132d2677112b4f80ec2bd2127"
+      DOTENV_LINTER_VERSION: "4.0.0"
       ESLINT_VERSION: "10.4.1"
       GITLEAKS_VERSION: "8.21.2"
       HADOLINT_VERSION: "2.14.0"
+      MARKDOWNLINT_VERSION: "0.48.0"
       NODE_VERSION: "22.13.0"
       OSV_SCANNER_VERSION: "2.3.8"
       OXLINT_LINUX_X64_GNU_INTEGRITY: "sha512-Gt3KHgp46mRKz4sJeaASmKvD8ayXookRw07RMf+NowhEztGGDZ7VrXpoW96XuKJLjFukWizOFVNjmYb/u7caNQ=="
@@ -348,6 +368,130 @@ jobs:
             fi
           fi
           python3 "$RUNNER_DIR/.github/scripts/yamllint_to_sarif.py" "$raw" "$out" \
+            --base-dir "$SOURCE_DIR" --cap "$RESULT_CAP"
+
+      - name: Run markdownlint to SARIF
+        if: ${{ inputs.markdownlint }}
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          json="$SARIF_DIR/markdownlint.json"
+          out="$SARIF_DIR/markdownlint.sarif"
+          markdownlint_config="$RUNNER_DIR/.github/config/markdownlint-sigilix.json"
+          if [ ! -f "$markdownlint_config" ]; then
+            echo "::warning::markdownlint Sigilix config missing at $markdownlint_config - emitting empty markdownlint SARIF run."
+            printf '[]' > "$json"
+          else
+            npx --yes "markdownlint-cli@${MARKDOWNLINT_VERSION}" \
+              --config "$markdownlint_config" \
+              --dot \
+              --json \
+              --output "$json" \
+              --ignore '.git' \
+              --ignore 'node_modules' \
+              --ignore 'dist' \
+              --ignore 'build' \
+              --ignore 'coverage' \
+              --ignore '.next' \
+              --ignore 'out' \
+              --ignore '.venv' \
+              --ignore 'vendor' \
+              --ignore '__pycache__' \
+              --ignore '.tox' \
+              --ignore '.mypy_cache' \
+              --ignore '.pytest_cache' \
+              --ignore '.terraform' \
+              '**/*.md' '**/*.markdown' || true
+            if [ ! -e "$json" ]; then printf '[]' > "$json"; fi
+          fi
+          python3 "$RUNNER_DIR/.github/scripts/markdownlint_to_sarif.py" "$json" "$out" \
+            --base-dir "$SOURCE_DIR" --cap "$RESULT_CAP"
+
+      - name: Run dotenv-linter to SARIF
+        if: ${{ inputs.dotenv-linter }}
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          raw="$RUNNER_TEMP/dotenv-linter.txt"
+          out="$SARIF_DIR/dotenv-linter.sarif"
+          dotenv_archive="$RUNNER_TEMP/dotenv-linter.tar.gz"
+          dotenv_bin="$RUNNER_TEMP/dotenv-linter"
+          trap 'rm -f "$raw"' EXIT
+          if ! curl -fsSL -o "$dotenv_archive" \
+            "https://github.com/dotenv-linter/dotenv-linter/releases/download/v${DOTENV_LINTER_VERSION}/dotenv-linter-linux-x86_64.tar.gz"; then
+            echo "::warning::dotenv-linter download failed - emitting empty dotenv-linter SARIF run."
+            : > "$raw"
+          elif ! printf '%s  %s\n' "$DOTENV_LINTER_LINUX_X86_64_SHA256" "$dotenv_archive" | sha256sum -c --strict -; then
+            echo "::warning::dotenv-linter checksum mismatch - emitting empty dotenv-linter SARIF run."
+            : > "$raw"
+          elif ! tar -xzf "$dotenv_archive" -C "$RUNNER_TEMP" dotenv-linter; then
+            echo "::warning::dotenv-linter extract failed - emitting empty dotenv-linter SARIF run."
+            : > "$raw"
+          else
+            "$dotenv_bin" --plain check --recursive --skip-updates \
+              --exclude .git \
+              --exclude node_modules \
+              --exclude dist \
+              --exclude build \
+              --exclude coverage \
+              --exclude .next \
+              --exclude out \
+              --exclude .venv \
+              --exclude vendor \
+              --exclude __pycache__ \
+              --exclude .tox \
+              --exclude .mypy_cache \
+              --exclude .pytest_cache \
+              --exclude .terraform \
+              . > "$raw" || true
+          fi
+          python3 "$RUNNER_DIR/.github/scripts/dotenv_linter_to_sarif.py" "$raw" "$out" \
+            --base-dir "$SOURCE_DIR" --cap "$RESULT_CAP"
+
+      - name: Run checkmake to SARIF
+        if: ${{ inputs.checkmake }}
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          raw="$RUNNER_TEMP/checkmake.json"
+          out="$SARIF_DIR/checkmake.sarif"
+          checkmake_bin="$RUNNER_TEMP/checkmake"
+          checkmake_config="$RUNNER_DIR/.github/config/checkmake-sigilix.ini"
+          checkmake_raw_cap=$((10 * 1024 * 1024))
+          trap 'rm -f "$raw"' EXIT
+          : > "$raw"
+          if ! curl -fsSL -o "$checkmake_bin" \
+            "https://github.com/checkmake/checkmake/releases/download/v${CHECKMAKE_VERSION}/checkmake-v${CHECKMAKE_VERSION}.linux.amd64"; then
+            echo "::warning::checkmake download failed - emitting empty checkmake SARIF run."
+          elif ! printf '%s  %s\n' "$CHECKMAKE_LINUX_AMD64_SHA256" "$checkmake_bin" | sha256sum -c --strict -; then
+            echo "::warning::checkmake checksum mismatch - emitting empty checkmake SARIF run."
+          elif ! chmod +x "$checkmake_bin"; then
+            echo "::warning::checkmake chmod failed - emitting empty checkmake SARIF run."
+            rm -f "$checkmake_bin"
+          elif [ ! -f "$checkmake_config" ]; then
+            echo "::warning::checkmake Sigilix config missing at $checkmake_config - emitting empty checkmake SARIF run."
+          else
+            while IFS= read -r -d '' file; do
+              current_size="$(wc -c < "$raw" | tr -d '[:space:]')"
+              if [ "$current_size" -ge "$checkmake_raw_cap" ]; then
+                echo "::warning::checkmake raw output exceeded ${checkmake_raw_cap} bytes - later Makefiles skipped."
+                break
+              fi
+              output="$("$checkmake_bin" --config "$checkmake_config" --output json -- "$file" 2>/dev/null)" || true
+              output_size="$(printf '%s\n' "$output" | wc -c | tr -d '[:space:]')"
+              if [ -n "$output" ] && [ $((current_size + output_size)) -le "$checkmake_raw_cap" ]; then
+                printf '%s\n' "$output" >> "$raw"
+              fi
+            done < <(find . -type f \( -name 'Makefile' -o -name 'makefile' -o -name 'GNUmakefile' -o -name '*.mk' -o -name '*.make' \) \
+              -not -path './.git/*' -not -path './node_modules/*' -not -path './dist/*' -not -path './build/*' \
+              -not -path './coverage/*' -not -path './.next/*' -not -path './out/*' -not -path './.venv/*' \
+              -not -path './vendor/*' -not -path './__pycache__/*' -not -path './.tox/*' -not -path './.mypy_cache/*' \
+              -not -path './.pytest_cache/*' -not -path './.terraform/*' -print0)
+          fi
+          python3 "$RUNNER_DIR/.github/scripts/checkmake_to_sarif.py" "$raw" "$out" \
             --base-dir "$SOURCE_DIR" --cap "$RESULT_CAP"
 
       - name: Run gitleaks to SARIF
@@ -667,6 +811,9 @@ jobs:
           BIOME_ENABLED: ${{ inputs.biome }}
           OXLINT_ENABLED: ${{ inputs.oxlint }}
           YAMLLINT_ENABLED: ${{ inputs.yamllint }}
+          MARKDOWNLINT_ENABLED: ${{ inputs.markdownlint }}
+          DOTENV_LINTER_ENABLED: ${{ inputs.dotenv-linter }}
+          CHECKMAKE_ENABLED: ${{ inputs.checkmake }}
         run: |
           set -euo pipefail
           python3 "$RUNNER_DIR/.github/scripts/sigilix_scan_manifest.py" \

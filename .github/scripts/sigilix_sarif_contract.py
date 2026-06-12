@@ -23,6 +23,9 @@ KNOWN_TOOL_IDS = frozenset(
         "biome",
         "oxlint",
         "yamllint",
+        "markdownlint",
+        "dotenv-linter",
+        "checkmake",
     }
 )
 DEFAULT_TOOL_NAMES = {
@@ -42,6 +45,9 @@ DEFAULT_TOOL_NAMES = {
     "biome": "Biome",
     "oxlint": "Oxlint",
     "yamllint": "YAMLlint",
+    "markdownlint": "markdownlint",
+    "dotenv-linter": "dotenv-linter",
+    "checkmake": "checkmake",
 }
 
 _SEVERITY_RANKS = {
