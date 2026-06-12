@@ -173,6 +173,8 @@ jobs:
       DETECT_LIBC_VERSION: "2.1.2"
       DOTENV_LINTER_LINUX_X86_64_SHA256: "9e2f1f6eb88a71ac15ef209f78f5a68644db82f132d2677112b4f80ec2bd2127"
       DOTENV_LINTER_VERSION: "4.0.0"
+      ESLINT_PLUGIN_SECURITY_VERSION: "4.0.1"
+      ESLINT_PLUGIN_UNICORN_VERSION: "65.0.1"
       ESLINT_VERSION: "10.4.1"
       GITLEAKS_VERSION: "8.21.2"
       HADOLINT_VERSION: "2.14.0"
@@ -190,6 +192,8 @@ jobs:
       TFLINT_VERSION: "0.63.1"
       TRIVY_VERSION: "0.71.0"
       TRUFFLEHOG_VERSION: "3.95.5"
+      TYPESCRIPT_ESLINT_VERSION: "8.61.0"
+      TYPESCRIPT_VERSION: "6.0.3"
       YAMLLINT_VERSION: "1.37.1"
       ZIZMOR_VERSION: "1.25.2"
       SARIF_DIR: ${{ github.workspace }}/sarif
@@ -250,32 +254,7 @@ jobs:
         run: |
           set -euo pipefail
           cd "$SOURCE_DIR"
-          json="$SARIF_DIR/eslint.json"
-          out="$SARIF_DIR/eslint.sarif"
-          declare -a patterns=(-name '*.js' -o -name '*.jsx' -o -name '*.mjs' -o -name '*.cjs')
-          declare -a flags=(--format json)
-          case "$ESLINT_MODE" in
-            safe)
-              flags+=(--no-config-lookup --rule no-undef:error --rule no-unreachable:error)
-              ;;
-            repo-config)
-              echo "::warning::ESLint repo-config mode executes caller repository ESLint config and plugins in the no-OIDC scan job."
-              patterns+=(-o -name '*.ts' -o -name '*.tsx')
-              ;;
-            *)
-              echo "::warning::unknown eslint-mode '$ESLINT_MODE'; falling back to safe."
-              flags+=(--no-config-lookup --rule no-undef:error --rule no-unreachable:error)
-              ;;
-          esac
-          mapfile -d '' files < <(find . -type f \( "${patterns[@]}" \) \
-            -not -path './.git/*' -not -path './node_modules/*' -print0)
-          if [ "${#files[@]}" -eq 0 ]; then
-            printf '[]' > "$json"
-          else
-            npx --yes "eslint@${ESLINT_VERSION}" "${flags[@]}" "${files[@]}" > "$json" || true
-          fi
-          python3 "$RUNNER_DIR/.github/scripts/eslint_to_sarif.py" "$json" "$out" \
-            --base-dir "$SOURCE_DIR" --cap "$RESULT_CAP"
+          bash "$RUNNER_DIR/.github/scripts/run_eslint.sh"
 
       - name: Run Ruff to SARIF
         if: ${{ inputs.ruff }}

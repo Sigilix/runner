@@ -19,7 +19,7 @@ Current staged catalog:
 | Tool | Default | Notes |
 | --- | --- | --- |
 | Semgrep | on | Native SARIF with Sigilix metadata. `semgrep-config` defaults to `auto`. |
-| ESLint | on | Safe mode by default: no repository config or plugins. Use `eslint-mode: repo-config` only when you accept executing the caller repository's ESLint config/plugins in the scan job. |
+| ESLint | on | Safe mode by default: no repository config or plugins. Uses Sigilix-owned JavaScript/TypeScript logic, promise, and security rules; typed TypeScript promise rules turn on when a TS config is detected. Use `eslint-mode: repo-config` only when you accept executing the caller repository's ESLint config/plugins in the scan job. |
 | Ruff | on | Native SARIF with Sigilix metadata. |
 | actionlint | on | Converts actionlint JSON to SARIF for GitHub Actions workflows. |
 | ShellCheck | on | Converts ShellCheck `json1` output to SARIF. |
