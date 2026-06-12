@@ -1,9 +1,32 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.4.16/schema.json",
+  // Keep file selection in runner-owned config so `biome lint .` avoids
+  // unbounded shell argv while still skipping common generated directories.
+  "files": {
+    "includes": [
+      "**/*.js",
+      "**/*.jsx",
+      "**/*.mjs",
+      "**/*.cjs",
+      "**/*.ts",
+      "**/*.tsx",
+      "**/*.json",
+      "**/*.jsonc",
+      "!**/.git/**",
+      "!**/node_modules/**",
+      "!**/dist/**",
+      "!**/build/**",
+      "!**/coverage/**",
+      "!**/.next/**",
+      "!**/out/**"
+    ]
+  },
   "formatter": { "enabled": false },
   "linter": {
     "enabled": true,
     "rules": {
+      // Do not inherit Biome's evolving recommended set; every enabled rule is
+      // explicit so a Biome upgrade requires a deliberate rule audit.
       "recommended": false,
       "correctness": {
         "noInvalidConstructorSuper": "error",

@@ -1,9 +1,6 @@
 import json
 import os
 import re
-import subprocess
-import tempfile
-import textwrap
 import unittest
 
 
@@ -27,68 +24,51 @@ class BiomeWorkflowRuntimeTest(unittest.TestCase):
         self.assertIsNotNone(match)
         return match.group(0)
 
-    def workflow_biome_find_command(self):
-        match = re.search(r'(?ms)^[ \t]+if ! (?P<command>find -P .+? > "\$files_list"); then', self.workflow_biome_block())
-        self.assertIsNotNone(match)
-        return match.group("command")
-
-    def bash_env(self, **values):
-        return {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), **values}
-
     def test_biome_uses_sigilix_configured_lint_mode(self):
         block = self.workflow_biome_block()
 
         self.assertIn('biome_config="$RUNNER_DIR/.github/config/biome-sigilix.jsonc"', block)
-        self.assertIn('npx --yes "@biomejs/biome@${BIOME_VERSION}" lint \\', block)
+        self.assertIn('npx --yes "@biomejs/biome@${BIOME_VERSION}" lint . \\', block)
         self.assertNotIn('ci . \\', block)
+        self.assertNotIn('mapfile -d', block)
+        self.assertNotIn('"${files[@]}"', block)
         self.assertIn('--config-path "$biome_config" \\', block)
         self.assertIn("--vcs-use-ignore-file=false \\", block)
         self.assertIn("--files-ignore-unknown=true \\", block)
         self.assertIn("--no-errors-on-unmatched \\", block)
         self.assertIn("--reporter=sarif \\", block)
-        self.assertIn('--reporter-file="$raw" \\', block)
-        self.assertRegex(block, r"\n\s+-- \\\n\s+\"\$\{files\[@\]\}\"")
+        self.assertIn('--reporter-file="$raw"; then', block)
 
-    def test_generated_directory_filter_excludes_nested_outputs(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            for path in (
-                "src/app.ts",
-                "src/data.json",
-                "packages/a/dist/app.ts",
-                "packages/a/build/app.js",
-                "packages/a/coverage/app.tsx",
-                "apps/web/.next/app.jsx",
-                "packages/a/out/app.mjs",
-                "node_modules/pkg/app.ts",
-            ):
-                full_path = os.path.join(tmpdir, path)
-                os.makedirs(os.path.dirname(full_path), exist_ok=True)
-                with open(full_path, "w", encoding="utf-8"):
-                    pass
+    def test_biome_config_limits_files_and_generated_dirs(self):
+        config = self.biome_config()
+        includes = config["files"]["includes"]
 
-            files_list = os.path.join(tmpdir, "biome-files")
-            find_command = self.workflow_biome_find_command()
-            self.assertIn("-print0", find_command)
-            self.assertIn('> "$files_list"', find_command)
-            subprocess.check_call(
-                [
-                    "bash",
-                    "-c",
-                    'files_list="$BIOME_FILES_LIST"\n' + find_command,
-                ],
-                cwd=tmpdir,
-                env=self.bash_env(**{"BIOME_FILES_LIST": files_list}),
-            )
-            with open(files_list, "rb") as handle:
-                selected = [entry.decode() for entry in handle.read().split(b"\0") if entry]
+        self.assertEqual(
+            includes,
+            [
+                "**/*.js",
+                "**/*.jsx",
+                "**/*.mjs",
+                "**/*.cjs",
+                "**/*.ts",
+                "**/*.tsx",
+                "**/*.json",
+                "**/*.jsonc",
+                "!**/.git/**",
+                "!**/node_modules/**",
+                "!**/dist/**",
+                "!**/build/**",
+                "!**/coverage/**",
+                "!**/.next/**",
+                "!**/out/**",
+            ],
+        )
 
-        self.assertEqual(selected, ["./src/app.ts", "./src/data.json"])
-
-    def test_empty_tree_emits_empty_sarif_before_normalization(self):
+    def test_empty_tree_relies_on_biome_empty_sarif_output(self):
         block = self.workflow_biome_block()
 
-        self.assertIn('files_list="$RUNNER_TEMP/biome-files"', block)
-        self.assertIn('printf \'{"version":"2.1.0","runs":[]}\' > "$raw"', block)
+        self.assertIn("--no-errors-on-unmatched \\", block)
+        self.assertNotIn('printf \'{"version":"2.1.0","runs":[]}', block)
         self.assertIn('if [ -s "$raw" ]; then', block)
 
     def test_nonzero_scan_with_sarif_is_still_normalized(self):
@@ -101,10 +81,9 @@ class BiomeWorkflowRuntimeTest(unittest.TestCase):
         self.assertLess(block.index(scan_warning), block.index(normalize))
 
     def test_biome_config_pins_explicit_correctness_rules(self):
-        with open(BIOME_CONFIG_PATH, encoding="utf-8") as handle:
-            config = json.loads(_strip_jsonc_comments(handle.read()))
+        config = self.biome_config()
 
-        self.assertEqual(set(config), {"$schema", "formatter", "linter"})
+        self.assertEqual(set(config), {"$schema", "files", "formatter", "linter"})
         self.assertEqual(config["linter"]["rules"]["recommended"], False)
         correctness_rules = config["linter"]["rules"]["correctness"]
         self.assertEqual(
@@ -118,6 +97,10 @@ class BiomeWorkflowRuntimeTest(unittest.TestCase):
         )
         self.assertNotIn("all", correctness_rules)
         self.assertTrue(all(level in {"error", "warn"} for level in correctness_rules.values()))
+
+    def biome_config(self):
+        with open(BIOME_CONFIG_PATH, encoding="utf-8") as handle:
+            return json.loads(_strip_jsonc_comments(handle.read()))
 
 
 def _strip_jsonc_comments(text):
