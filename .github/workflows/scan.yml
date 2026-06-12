@@ -102,6 +102,16 @@ on:
         required: false
         default: false
         type: boolean
+      biome:
+        description: "Run Biome on web source files and merge its SARIF."
+        required: false
+        default: false
+        type: boolean
+      oxlint:
+        description: "Run Oxlint on JavaScript and TypeScript source files and merge its SARIF."
+        required: false
+        default: false
+        type: boolean
       result-cap:
         description: "Maximum findings kept per Sigilix-managed deterministic tool run."
         required: false
@@ -127,11 +137,13 @@ jobs:
       contents: read
     env:
       ACTIONLINT_VERSION: "1.7.12"
+      BIOME_VERSION: "2.4.16"
       CHECKOV_VERSION: "3.3.1"
       ESLINT_VERSION: "10.4.1"
       GITLEAKS_VERSION: "8.21.2"
       HADOLINT_VERSION: "2.14.0"
       OSV_SCANNER_VERSION: "2.3.8"
+      OXLINT_VERSION: "1.69.0"
       RESULT_CAP: ${{ inputs.result-cap }}
       RUFF_VERSION: "0.15.17"
       SARIF_BYTE_CAP: ${{ inputs.sarif-byte-cap }}
@@ -454,6 +466,54 @@ jobs:
             fi
           fi
 
+      - name: Run Biome to SARIF
+        if: ${{ inputs.biome }}
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          raw="$SARIF_DIR/biome.raw.sarif"
+          out="$SARIF_DIR/biome.sarif"
+          if ! npx --yes "@biomejs/biome@${BIOME_VERSION}" ci . \
+            --files-ignore-unknown=true \
+            --reporter=sarif \
+            --reporter-file="$raw"; then
+            echo "::warning::biome scan failed - manifest will record missing output if no SARIF was produced."
+          fi
+          if [ -s "$raw" ]; then
+            python3 "$RUNNER_DIR/.github/scripts/sigilix_sarif_contract.py" \
+              biome "$raw" "$out" --cap "$RESULT_CAP" --ensure-run \
+              || echo "::warning::biome SARIF normalization failed - manifest will record missing output."
+          fi
+
+      - name: Run Oxlint to SARIF
+        if: ${{ inputs.oxlint }}
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          raw="$SARIF_DIR/oxlint.raw.sarif"
+          out="$SARIF_DIR/oxlint.sarif"
+          files_list="$RUNNER_TEMP/oxlint-files"
+          if ! find . -type f \( -name '*.js' -o -name '*.jsx' -o -name '*.mjs' -o -name '*.cjs' -o -name '*.ts' -o -name '*.tsx' \) \
+            -not -path './.git/*' -not -path './node_modules/*' -print0 > "$files_list"; then
+            echo "::warning::oxlint file discovery failed - manifest will record missing output."
+          else
+            mapfile -d '' files < "$files_list"
+            if [ "${#files[@]}" -eq 0 ]; then
+              printf '{"version":"2.1.0","runs":[]}' > "$raw"
+            elif ! npx --yes "oxlint@${OXLINT_VERSION}" \
+              --format sarif \
+              --no-error-on-unmatched-pattern \
+              -- \
+              "${files[@]}" > "$raw"; then
+              echo "::warning::oxlint scan failed - manifest will record missing output if no SARIF was produced."
+            fi
+            if [ -s "$raw" ]; then
+              python3 "$RUNNER_DIR/.github/scripts/sigilix_sarif_contract.py" \
+                oxlint "$raw" "$out" --cap "$RESULT_CAP" --ensure-run \
+                || echo "::warning::oxlint SARIF normalization failed - manifest will record missing output."
+            fi
+          fi
+
       - name: Build scan manifest
         env:
           SEMGREP_ENABLED: ${{ inputs.semgrep }}
@@ -469,6 +529,8 @@ jobs:
           ZIZMOR_ENABLED: ${{ inputs.zizmor }}
           HADOLINT_ENABLED: ${{ inputs.hadolint }}
           TFLINT_ENABLED: ${{ inputs.tflint }}
+          BIOME_ENABLED: ${{ inputs.biome }}
+          OXLINT_ENABLED: ${{ inputs.oxlint }}
         run: |
           set -euo pipefail
           declare -a args=()
@@ -495,6 +557,8 @@ jobs:
           add_tool zizmor "$ZIZMOR_ENABLED" "$SARIF_DIR/zizmor.sarif"
           add_tool hadolint "$HADOLINT_ENABLED" "$SARIF_DIR/hadolint.sarif"
           add_tool tflint "$TFLINT_ENABLED" "$SARIF_DIR/tflint.sarif"
+          add_tool biome "$BIOME_ENABLED" "$SARIF_DIR/biome.sarif"
+          add_tool oxlint "$OXLINT_ENABLED" "$SARIF_DIR/oxlint.sarif"
           python3 "$RUNNER_DIR/.github/scripts/sigilix_scan_manifest.py" "${args[@]}" \
             -o "$SARIF_DIR/scan-manifest.json"
 
@@ -515,6 +579,8 @@ jobs:
             "$SARIF_DIR/zizmor.sarif" \
             "$SARIF_DIR/hadolint.sarif" \
             "$SARIF_DIR/tflint.sarif" \
+            "$SARIF_DIR/biome.sarif" \
+            "$SARIF_DIR/oxlint.sarif" \
             -o "$SARIF_DIR/sarif.json" \
             --byte-cap "$SARIF_BYTE_CAP"
           (cd "$SARIF_DIR" && sha256sum sarif.json > sarif.json.sha256)

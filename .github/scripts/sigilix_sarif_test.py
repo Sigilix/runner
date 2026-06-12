@@ -7,6 +7,7 @@ import tempfile
 import unittest
 
 from sigilix_sarif_contract import (
+    KNOWN_TOOL_IDS,
     SIGILIX_SCHEMA_VERSION,
     SIGILIX_SOURCE,
     _main as contract_main,
@@ -70,6 +71,8 @@ class SigilixSarifContractTest(unittest.TestCase):
             ("zizmor", "zizmor"),
             ("hadolint", "Hadolint"),
             ("tflint", "TFLint"),
+            ("biome", "Biome"),
+            ("oxlint", "Oxlint"),
         ):
             run = attach_sigilix_metadata({}, tool_id)
             driver = run["tool"]["driver"]
@@ -384,7 +387,7 @@ class SigilixScanManifestTest(unittest.TestCase):
 
     def test_manifest_rejects_more_specs_than_known_tools(self):
         with self.assertRaises(ValueError):
-            build_scan_manifest([("semgrep", False, "")] * 14)
+            build_scan_manifest([("semgrep", False, "")] * (len(KNOWN_TOOL_IDS) + 1))
 
     def test_manifest_treats_non_object_sarif_runs_as_invalid_output(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -400,12 +403,34 @@ class SigilixScanManifestTest(unittest.TestCase):
             manifest = build_scan_manifest(
                 [
                     (tool_id, True, os.path.join(tmpdir, f"{tool_id}.sarif"))
-                    for tool_id in NEXT_BATCH_TOOL_OUTPUTS
+                    for tool_id in {**NEXT_BATCH_TOOL_OUTPUTS, **LANGUAGE_SARIF_TOOL_OUTPUTS}
                 ]
             )
 
-        self.assertEqual({tool["toolId"]: tool["status"] for tool in manifest["tools"]}, {tool_id: "missing-output" for tool_id in NEXT_BATCH_TOOL_OUTPUTS})
-        self.assertEqual(manifest["summary"], {"enabled": 6, "produced": 0, "empty": 0, "missing": 6, "invalid": 0})
+        expected = {tool_id: "missing-output" for tool_id in {**NEXT_BATCH_TOOL_OUTPUTS, **LANGUAGE_SARIF_TOOL_OUTPUTS}}
+        self.assertEqual({tool["toolId"]: tool["status"] for tool in manifest["tools"]}, expected)
+        self.assertEqual(
+            manifest["summary"],
+            {"enabled": len(expected), "produced": 0, "empty": 0, "missing": len(expected), "invalid": 0},
+        )
+
+    def test_contract_cli_attaches_metadata_for_new_native_language_tools(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_path = os.path.join(tmpdir, "input.sarif")
+            with open(input_path, "w", encoding="utf-8") as handle:
+                json.dump({"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "Native"}}}]}, handle)
+
+            for tool_id in LANGUAGE_SARIF_TOOL_OUTPUTS:
+                output_path = os.path.join(tmpdir, f"{tool_id}.sarif")
+
+                exit_code = contract_main([tool_id, input_path, output_path, "--ensure-run"])
+
+                self.assertEqual(exit_code, 0)
+                with open(output_path, "r", encoding="utf-8") as handle:
+                    output = json.load(handle)
+                driver = output["runs"][0]["tool"]["driver"]
+                self.assertEqual(driver["name"], "Native")
+                self.assertEqual(driver["properties"]["sigilixToolId"], tool_id)
 
 
 NEXT_BATCH_TOOL_OUTPUTS = {
@@ -415,6 +440,11 @@ NEXT_BATCH_TOOL_OUTPUTS = {
     "zizmor": "zizmor.sarif",
     "hadolint": "hadolint.sarif",
     "tflint": "tflint.sarif",
+}
+
+LANGUAGE_SARIF_TOOL_OUTPUTS = {
+    "biome": "biome.sarif",
+    "oxlint": "oxlint.sarif",
 }
 
 
@@ -427,7 +457,7 @@ class SigilixWorkflowContractTest(unittest.TestCase):
     def test_next_batch_tool_inputs_are_explicit_default_off(self):
         text = self.workflow_text()
 
-        for tool_id in NEXT_BATCH_TOOL_OUTPUTS:
+        for tool_id in {**NEXT_BATCH_TOOL_OUTPUTS, **LANGUAGE_SARIF_TOOL_OUTPUTS}:
             self.assertRegex(
                 text,
                 rf"\n      {re.escape(tool_id)}:\n(?:        .+\n)+?        default: false\n",
@@ -436,11 +466,22 @@ class SigilixWorkflowContractTest(unittest.TestCase):
     def test_next_batch_tool_outputs_are_manifested_and_merged(self):
         text = self.workflow_text()
 
-        for tool_id, output_name in NEXT_BATCH_TOOL_OUTPUTS.items():
+        for tool_id, output_name in {**NEXT_BATCH_TOOL_OUTPUTS, **LANGUAGE_SARIF_TOOL_OUTPUTS}.items():
             env_var = tool_id.upper().replace("-", "_") + "_ENABLED"
             self.assertIn(f"{env_var}: ${{{{ inputs.{tool_id} }}}}", text)
             self.assertIn(f'add_tool {tool_id} "${env_var}" "$SARIF_DIR/{output_name}"', text)
             self.assertIn(f'"$SARIF_DIR/{output_name}"', text)
+
+    def test_oxlint_empty_tree_emits_empty_sarif(self):
+        text = self.workflow_text()
+
+        self.assertIn('files_list="$RUNNER_TEMP/oxlint-files"', text)
+        self.assertIn('printf \'{"version":"2.1.0","runs":[]}\' > "$raw"', text)
+
+    def test_oxlint_separates_options_from_file_paths(self):
+        text = self.workflow_text()
+
+        self.assertIn('-- \\\n              "${files[@]}" > "$raw"', text)
 
     def test_next_batch_tool_versions_are_pinned(self):
         text = self.workflow_text()
@@ -452,6 +493,8 @@ class SigilixWorkflowContractTest(unittest.TestCase):
             "ZIZMOR_VERSION",
             "HADOLINT_VERSION",
             "TFLINT_VERSION",
+            "BIOME_VERSION",
+            "OXLINT_VERSION",
         ):
             match = re.search(rf"\n      {env_var}: \"([^\"]+)\"\n", text)
             self.assertIsNotNone(match)
