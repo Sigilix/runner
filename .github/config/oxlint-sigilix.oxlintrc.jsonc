@@ -1,0 +1,3 @@
+// Sigilix-owned config used with --disable-nested-config.
+// Rule selection is controlled entirely by CLI flags in scan.yml.
+{}

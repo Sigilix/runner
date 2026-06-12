@@ -541,6 +541,8 @@ jobs:
           cd "$SOURCE_DIR"
           raw="$SARIF_DIR/oxlint.raw.sarif"
           out="$SARIF_DIR/oxlint.sarif"
+          oxlint_config="$RUNNER_DIR/.github/config/oxlint-sigilix.oxlintrc.jsonc"
+          oxlint_cmd=(npx --yes "oxlint@${OXLINT_VERSION}")
           files_list="$RUNNER_TEMP/oxlint-files"
           if ! find . -type f \( -name '*.js' -o -name '*.jsx' -o -name '*.mjs' -o -name '*.cjs' -o -name '*.ts' -o -name '*.tsx' \) \
             -not -path './.git/*' -not -path './node_modules/*' -print0 > "$files_list"; then
@@ -549,12 +551,36 @@ jobs:
             mapfile -d '' files < "$files_list"
             if [ "${#files[@]}" -eq 0 ]; then
               printf '{"version":"2.1.0","runs":[]}' > "$raw"
-            elif ! npx --yes "oxlint@${OXLINT_VERSION}" \
-              --format sarif \
-              --no-error-on-unmatched-pattern \
-              -- \
-              "${files[@]}" > "$raw"; then
-              echo "::warning::oxlint scan failed - manifest will record missing output if no SARIF was produced."
+            elif [ ! -f "$oxlint_config" ]; then
+              echo "::warning::oxlint Sigilix config missing at $oxlint_config - manifest will record missing output."
+            else
+              oxlint_can_scan=true
+              if ! oxlint_version="$("${oxlint_cmd[@]}" --version 2>/dev/null)"; then
+                oxlint_version=""
+                oxlint_can_scan=false
+              else
+                oxlint_detected_version="$(printf '%s\n' "$oxlint_version" | sed -nE 's/.*([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' | head -n 1)"
+                if [ "$oxlint_detected_version" != "$OXLINT_VERSION" ]; then
+                  oxlint_can_scan=false
+                fi
+              fi
+              if [ "$oxlint_can_scan" = false ]; then
+                echo "::warning::oxlint version mismatch or unavailable: expected ${OXLINT_VERSION}, got '${oxlint_version:-unavailable}' - manifest will record missing output."
+              fi
+              if [ "$oxlint_can_scan" = true ]; then
+                if ! "${oxlint_cmd[@]}" \
+                  --config "$oxlint_config" \
+                  --disable-nested-config \
+                  -A all -D correctness \
+                  --format sarif \
+                  --no-error-on-unmatched-pattern \
+                  -- \
+                  "${files[@]}" > "$raw"; then
+                  if [ ! -s "$raw" ]; then
+                    echo "::warning::oxlint scan failed and produced no SARIF output - manifest will record missing output."
+                  fi
+                fi
+              fi
             fi
             if [ -s "$raw" ]; then
               python3 "$RUNNER_DIR/.github/scripts/sigilix_sarif_contract.py" \

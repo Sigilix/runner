@@ -529,6 +529,13 @@ class SigilixWorkflowContractTest(unittest.TestCase):
         with open(path, "r", encoding="utf-8") as handle:
             return json.load(handle)
 
+    def config_text(self, name):
+        path = os.path.join(os.path.dirname(__file__), "..", "config", name)
+        if not os.path.exists(path):
+            return ""
+        with open(path, "r", encoding="utf-8") as handle:
+            return handle.read()
+
     def test_static_tool_manifest_matches_known_outputs(self):
         manifest = self.raw_tool_manifest()
 
@@ -659,7 +666,31 @@ class SigilixWorkflowContractTest(unittest.TestCase):
     def test_oxlint_separates_options_from_file_paths(self):
         text = self.workflow_text()
 
-        self.assertIn('-- \\\n              "${files[@]}" > "$raw"', text)
+        self.assertRegex(text, r"\n\s+-- \\\n\s+\"\$\{files\[@\]\}\" > \"\$raw\"")
+
+    def test_oxlint_uses_sigilix_controlled_correctness_mode(self):
+        text = self.workflow_text()
+        config_text = self.config_text("oxlint-sigilix.oxlintrc.jsonc")
+
+        self.assertIn("oxlint_config=\"$RUNNER_DIR/.github/config/oxlint-sigilix.oxlintrc.jsonc\"", text)
+        self.assertIn('--config "$oxlint_config"', text)
+        self.assertIn("--disable-nested-config", text)
+        self.assertIn("-A all -D correctness", text)
+        self.assertIn("Rule selection is controlled entirely by CLI flags", config_text)
+
+    def test_oxlint_asserts_pinned_runtime_version_before_scan(self):
+        text = self.workflow_text()
+
+        self.assertIn("oxlint_cmd=(npx --yes \"oxlint@${OXLINT_VERSION}\")", text)
+        self.assertIn("oxlint_version=\"$(", text)
+        self.assertIn('if ! oxlint_version="$("${oxlint_cmd[@]}" --version 2>/dev/null)"; then', text)
+        self.assertIn('oxlint_can_scan=false', text)
+        self.assertIn("oxlint_detected_version=\"$(printf '%s\\n' \"$oxlint_version\"", text)
+        self.assertIn('[ "$oxlint_detected_version" != "$OXLINT_VERSION" ]', text)
+        self.assertIn("oxlint version mismatch or unavailable", text)
+        self.assertIn('[ ! -f "$oxlint_config" ]', text)
+        self.assertIn('if [ "$oxlint_can_scan" = true ]; then', text)
+        self.assertIn('if [ ! -s "$raw" ]; then', text)
 
     def test_next_batch_tool_versions_are_pinned(self):
         text = self.workflow_text()
