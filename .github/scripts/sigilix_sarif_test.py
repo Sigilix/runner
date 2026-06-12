@@ -490,6 +490,7 @@ ALL_TOOL_OUTPUTS = {
     "semgrep": "semgrep.sarif",
     "eslint": "eslint.sarif",
     "ruff": "ruff.sarif",
+    "pylint": "pylint.sarif",
     "actionlint": "actionlint.sarif",
     "shellcheck": "shellcheck.sarif",
     "gitleaks": "gitleaks.sarif",

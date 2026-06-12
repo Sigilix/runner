@@ -16,6 +16,11 @@
       "output": "ruff.sarif"
     },
     {
+      "id": "pylint",
+      "env": "PYLINT_ENABLED",
+      "output": "pylint.sarif"
+    },
+    {
       "id": "actionlint",
       "env": "ACTIONLINT_ENABLED",
       "output": "actionlint.sarif"

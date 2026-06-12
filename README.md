@@ -21,6 +21,7 @@ Current staged catalog:
 | Semgrep | on | Native SARIF with Sigilix metadata. `semgrep-config` defaults to `auto`. |
 | ESLint | on | Safe mode by default: no repository config or plugins. Uses Sigilix-owned JavaScript/TypeScript logic, promise, and security rules; typed TypeScript promise rules turn on when a TS config is detected. Use `eslint-mode: repo-config` only when you accept executing the caller repository's ESLint config/plugins in the scan job. |
 | Ruff | on | Native SARIF with Sigilix metadata. |
+| Pylint | on | Converts Pylint JSON output to SARIF. Uses a Sigilix-owned high-confidence profile: Pylint fatal/error checks only, with caller config ignored and dependency-sensitive `import-error`/`no-member` disabled. |
 | actionlint | on | Converts actionlint JSON to SARIF for GitHub Actions workflows. |
 | ShellCheck | on | Converts ShellCheck `json1` output to SARIF. |
 | YAMLlint | on | Converts YAMLlint parsable output to SARIF with relaxed defaults for config feedback. |
@@ -42,6 +43,7 @@ Current staged catalog:
 > **SIG-107:** `oxlint` now defaults to `true`. Set `oxlint: false` (boolean) in the caller workflow to suppress it.
 > `biome` now defaults to `true`. Set `biome: false` (boolean) in the caller workflow to suppress it.
 > `ast-grep` now defaults to `true`. Set `ast-grep: false` (boolean) in the caller workflow to suppress it.
+> `pylint` now defaults to `true`. Set `pylint: false` (boolean) in the caller workflow to suppress it.
 > `markdownlint`, `dotenv-linter`, and `checkmake` now default to `true`. Set the matching
 > boolean input to `false` in the caller workflow to suppress one of them.
 
@@ -83,7 +85,7 @@ a moving ref cannot prove which version of the runner ran.
 
 Default-on tool booleans: `semgrep`, `eslint`, `ruff`, `actionlint`, `shellcheck`, `yamllint`,
 `markdownlint`, `dotenv-linter`, `checkmake`, `gitleaks`, `osv-scanner`, `zizmor`, `hadolint`,
-`biome`, `oxlint`, and `ast-grep`.
+`biome`, `oxlint`, `ast-grep`, and `pylint`.
 
 Default-off opt-in tool booleans: `checkov`, `trivy`, `trufflehog`, and `tflint`.
 
