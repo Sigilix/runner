@@ -1,0 +1,113 @@
+id: js-await-for-each-async-callback
+language: JavaScript
+severity: error
+message: "forEach does not await async callbacks; use for...of or Promise.all(array.map(...))."
+rule:
+  any:
+    - pattern: await $ARRAY.forEach(async $ARG => $BODY)
+    - pattern: await $ARRAY.forEach(async ($$$ARGS) => $BODY)
+    - pattern: await $ARRAY.forEach(async function ($$$ARGS) { $$$BODY })
+---
+id: ts-await-for-each-async-callback
+language: TypeScript
+severity: error
+message: "forEach does not await async callbacks; use for...of or Promise.all(array.map(...))."
+rule:
+  any:
+    - pattern: await $ARRAY.forEach(async $ARG => $BODY)
+    - pattern: await $ARRAY.forEach(async ($$$ARGS) => $BODY)
+    - pattern: await $ARRAY.forEach(async function ($$$ARGS) { $$$BODY })
+---
+id: tsx-await-for-each-async-callback
+language: Tsx
+severity: error
+message: "forEach does not await async callbacks; use for...of or Promise.all(array.map(...))."
+rule:
+  any:
+    - pattern: await $ARRAY.forEach(async $ARG => $BODY)
+    - pattern: await $ARRAY.forEach(async ($$$ARGS) => $BODY)
+    - pattern: await $ARRAY.forEach(async function ($$$ARGS) { $$$BODY })
+---
+id: js-async-array-predicate
+language: JavaScript
+severity: error
+message: "Async array predicate callbacks return truthy Promise objects; await before filter/some/every/find."
+rule:
+  any:
+    - pattern: $ARRAY.filter(async $ARG => $BODY)
+    - pattern: $ARRAY.filter(async ($$$ARGS) => $BODY)
+    - pattern: $ARRAY.filter(async function ($$$ARGS) { $$$BODY })
+    - pattern: $ARRAY.some(async $ARG => $BODY)
+    - pattern: $ARRAY.some(async ($$$ARGS) => $BODY)
+    - pattern: $ARRAY.some(async function ($$$ARGS) { $$$BODY })
+    - pattern: $ARRAY.every(async $ARG => $BODY)
+    - pattern: $ARRAY.every(async ($$$ARGS) => $BODY)
+    - pattern: $ARRAY.every(async function ($$$ARGS) { $$$BODY })
+    - pattern: $ARRAY.find(async $ARG => $BODY)
+    - pattern: $ARRAY.find(async ($$$ARGS) => $BODY)
+    - pattern: $ARRAY.find(async function ($$$ARGS) { $$$BODY })
+    - pattern: $ARRAY.findIndex(async $ARG => $BODY)
+    - pattern: $ARRAY.findIndex(async ($$$ARGS) => $BODY)
+    - pattern: $ARRAY.findIndex(async function ($$$ARGS) { $$$BODY })
+    - pattern: $ARRAY.findLast(async $ARG => $BODY)
+    - pattern: $ARRAY.findLast(async ($$$ARGS) => $BODY)
+    - pattern: $ARRAY.findLast(async function ($$$ARGS) { $$$BODY })
+    - pattern: $ARRAY.findLastIndex(async $ARG => $BODY)
+    - pattern: $ARRAY.findLastIndex(async ($$$ARGS) => $BODY)
+    - pattern: $ARRAY.findLastIndex(async function ($$$ARGS) { $$$BODY })
+---
+id: ts-async-array-predicate
+language: TypeScript
+severity: error
+message: "Async array predicate callbacks return truthy Promise objects; await before filter/some/every/find."
+rule:
+  any:
+    - pattern: $ARRAY.filter(async $ARG => $BODY)
+    - pattern: $ARRAY.filter(async ($$$ARGS) => $BODY)
+    - pattern: $ARRAY.filter(async function ($$$ARGS) { $$$BODY })
+    - pattern: $ARRAY.some(async $ARG => $BODY)
+    - pattern: $ARRAY.some(async ($$$ARGS) => $BODY)
+    - pattern: $ARRAY.some(async function ($$$ARGS) { $$$BODY })
+    - pattern: $ARRAY.every(async $ARG => $BODY)
+    - pattern: $ARRAY.every(async ($$$ARGS) => $BODY)
+    - pattern: $ARRAY.every(async function ($$$ARGS) { $$$BODY })
+    - pattern: $ARRAY.find(async $ARG => $BODY)
+    - pattern: $ARRAY.find(async ($$$ARGS) => $BODY)
+    - pattern: $ARRAY.find(async function ($$$ARGS) { $$$BODY })
+    - pattern: $ARRAY.findIndex(async $ARG => $BODY)
+    - pattern: $ARRAY.findIndex(async ($$$ARGS) => $BODY)
+    - pattern: $ARRAY.findIndex(async function ($$$ARGS) { $$$BODY })
+    - pattern: $ARRAY.findLast(async $ARG => $BODY)
+    - pattern: $ARRAY.findLast(async ($$$ARGS) => $BODY)
+    - pattern: $ARRAY.findLast(async function ($$$ARGS) { $$$BODY })
+    - pattern: $ARRAY.findLastIndex(async $ARG => $BODY)
+    - pattern: $ARRAY.findLastIndex(async ($$$ARGS) => $BODY)
+    - pattern: $ARRAY.findLastIndex(async function ($$$ARGS) { $$$BODY })
+---
+id: tsx-async-array-predicate
+language: Tsx
+severity: error
+message: "Async array predicate callbacks return truthy Promise objects; await before filter/some/every/find."
+rule:
+  any:
+    - pattern: $ARRAY.filter(async $ARG => $BODY)
+    - pattern: $ARRAY.filter(async ($$$ARGS) => $BODY)
+    - pattern: $ARRAY.filter(async function ($$$ARGS) { $$$BODY })
+    - pattern: $ARRAY.some(async $ARG => $BODY)
+    - pattern: $ARRAY.some(async ($$$ARGS) => $BODY)
+    - pattern: $ARRAY.some(async function ($$$ARGS) { $$$BODY })
+    - pattern: $ARRAY.every(async $ARG => $BODY)
+    - pattern: $ARRAY.every(async ($$$ARGS) => $BODY)
+    - pattern: $ARRAY.every(async function ($$$ARGS) { $$$BODY })
+    - pattern: $ARRAY.find(async $ARG => $BODY)
+    - pattern: $ARRAY.find(async ($$$ARGS) => $BODY)
+    - pattern: $ARRAY.find(async function ($$$ARGS) { $$$BODY })
+    - pattern: $ARRAY.findIndex(async $ARG => $BODY)
+    - pattern: $ARRAY.findIndex(async ($$$ARGS) => $BODY)
+    - pattern: $ARRAY.findIndex(async function ($$$ARGS) { $$$BODY })
+    - pattern: $ARRAY.findLast(async $ARG => $BODY)
+    - pattern: $ARRAY.findLast(async ($$$ARGS) => $BODY)
+    - pattern: $ARRAY.findLast(async function ($$$ARGS) { $$$BODY })
+    - pattern: $ARRAY.findLastIndex(async $ARG => $BODY)
+    - pattern: $ARRAY.findLastIndex(async ($$$ARGS) => $BODY)
+    - pattern: $ARRAY.findLastIndex(async function ($$$ARGS) { $$$BODY })

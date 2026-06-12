@@ -1,0 +1,23 @@
+id: js-await-for-each-async-callback
+valid:
+  - async function saveAll(items) { for (const item of items) { await save(item); } }
+  - async function saveAll(items) { await Promise.all(items.map(async item => save(item))); }
+invalid:
+  - async function saveAll(items) { await items.forEach(async item => save(item)); }
+  - async function saveAll(items) { await items.forEach(async (item) => { await save(item); }); }
+  - async function saveAll(items) { await items.forEach(async function (item) { await save(item); }); }
+---
+id: ts-await-for-each-async-callback
+valid:
+  - "async function saveAll(items: string[]) { for (const item of items) { await save(item); } }"
+  - "async function saveAll(items: string[]) { await Promise.all(items.map(async item => save(item))); }"
+invalid:
+  - "async function saveAll(items: string[]) { await items.forEach(async item => save(item)); }"
+  - "async function saveAll(items: string[]) { await items.forEach(async (item) => { await save(item); }); }"
+  - "async function saveAll(items: string[]) { await items.forEach(async function (item) { await save(item); }); }"
+---
+id: tsx-await-for-each-async-callback
+valid:
+  - "async function SaveAll({items}: Props) { await Promise.all(items.map(async item => save(item))); return <div />; }"
+invalid:
+  - "async function SaveAll({items}: Props) { await items.forEach(async item => save(item)); return <div />; }"

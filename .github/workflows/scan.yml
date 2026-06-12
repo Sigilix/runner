@@ -112,6 +112,11 @@ on:
         required: false
         default: true
         type: boolean
+      ast-grep:
+        description: "Run ast-grep with Sigilix-owned JavaScript and TypeScript logic rules."
+        required: false
+        default: true
+        type: boolean
       yamllint:
         description: "Run YAMLlint on YAML config files with relaxed defaults."
         required: false
@@ -157,10 +162,15 @@ jobs:
       contents: read
     env:
       ACTIONLINT_VERSION: "1.7.12"
+      AST_GREP_LINUX_X64_GNU_INTEGRITY: "sha512-r/o9Mag6OZmGevY9OJjatuUKDOX1rSvgo29qSfxpMbIciiH3hkzEW/2w1xTPZI8xnM7iC+k+CkGoknmoXVTYGg=="
+      AST_GREP_NPM_INTEGRITY: "sha512-DGi6xXAOBJubGg9QWqTeW8PzKSGHWEOa3uxXspEfYf532yb3lHmNJAcKMl1d+O9Xs9bTcNeDLC8se+O+tirEFQ=="
+      AST_GREP_VERSION: "0.43.0"
       BIOME_VERSION: "2.4.16"
       CHECKMAKE_LINUX_AMD64_SHA256: "e2effb876913f3ee2caef0ba35f6202c5e8a3cd55a077d8d2b9ce2034257b6af"
       CHECKMAKE_VERSION: "0.3.2"
       CHECKOV_VERSION: "3.3.1"
+      DETECT_LIBC_NPM_INTEGRITY: "sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ=="
+      DETECT_LIBC_VERSION: "2.1.2"
       DOTENV_LINTER_LINUX_X86_64_SHA256: "9e2f1f6eb88a71ac15ef209f78f5a68644db82f132d2677112b4f80ec2bd2127"
       DOTENV_LINTER_VERSION: "4.0.0"
       ESLINT_VERSION: "10.4.1"
@@ -793,6 +803,13 @@ jobs:
             fi
           fi
 
+      - name: Run ast-grep to SARIF
+        if: ${{ inputs.ast-grep }}
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          bash "$RUNNER_DIR/.github/scripts/run_ast_grep.sh"
+
       - name: Build scan manifest
         env:
           SEMGREP_ENABLED: ${{ inputs.semgrep }}
@@ -810,6 +827,7 @@ jobs:
           TFLINT_ENABLED: ${{ inputs.tflint }}
           BIOME_ENABLED: ${{ inputs.biome }}
           OXLINT_ENABLED: ${{ inputs.oxlint }}
+          AST_GREP_ENABLED: ${{ inputs.ast-grep }}
           YAMLLINT_ENABLED: ${{ inputs.yamllint }}
           MARKDOWNLINT_ENABLED: ${{ inputs.markdownlint }}
           DOTENV_LINTER_ENABLED: ${{ inputs.dotenv-linter }}
