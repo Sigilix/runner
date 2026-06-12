@@ -34,8 +34,8 @@ class OxlintWorkflowRuntimeTest(unittest.TestCase):
     def bash_env(self, **values):
         return {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), **values}
 
-    def run_tarball_size_guard(self, package, binding):
-        return subprocess.check_output(
+    def tarball_size_guard_rejects(self, package, binding):
+        result = subprocess.run(
             [
                 "bash",
                 "-c",
@@ -45,10 +45,9 @@ oxlint_package="$OXLINT_PACKAGE"
 oxlint_binding_package="$OXLINT_BINDING_PACKAGE"
 if [ "$(tarball_size "$oxlint_package")" -le 1024 ] \
   || [ "$(tarball_size "$oxlint_binding_package")" -le 1024 ]; then
-  printf too-small
-else
-  printf ok
-fi""",
+  exit 0
+fi
+exit 1""",
             ],
             env=self.bash_env(
                 **{
@@ -56,8 +55,9 @@ fi""",
                     "OXLINT_BINDING_PACKAGE": binding,
                 }
             ),
-            text=True,
+            check=False,
         )
+        return result.returncode == 0
 
     def test_generated_directory_filter_excludes_nested_outputs(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -96,12 +96,15 @@ fi""",
     def test_tarball_size_guard_runs_before_integrity_checks(self):
         text = self.workflow_text()
 
+        missing_guard = '[ ! -s "$oxlint_package" ]'
         size_guard = 'tarball_size "$oxlint_package"'
         integrity_guard = 'sri_sha512 "$oxlint_package"'
         self.assertIn("tarball_size() {", text)
         self.assertIn("tarball at or below 1024 bytes after download", text)
+        self.assertIn(missing_guard, text)
         self.assertIn('[ "$(tarball_size "$oxlint_package")" -le 1024 ]', text)
         self.assertIn('[ "$(tarball_size "$oxlint_binding_package")" -le 1024 ]', text)
+        self.assertLess(text.index(missing_guard), text.index(size_guard))
         self.assertLess(text.index(size_guard), text.index(integrity_guard))
 
     def test_tarball_size_guard_rejects_tiny_packages(self):
@@ -113,11 +116,11 @@ fi""",
             with open(binding, "wb") as handle:
                 handle.write(b"x")
 
-            output = self.run_tarball_size_guard(package, binding)
+            rejected = self.tarball_size_guard_rejects(package, binding)
 
-        self.assertEqual(output, "too-small")
+        self.assertTrue(rejected)
 
-    def test_tarball_size_guard_allows_packages_above_threshold(self):
+    def test_tarball_size_guard_allows_first_byte_above_threshold(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             package = os.path.join(tmpdir, "oxlint.tgz")
             binding = os.path.join(tmpdir, "binding.tgz")
@@ -125,24 +128,9 @@ fi""",
                 with open(path, "wb") as handle:
                     handle.write(b"x" * 1025)
 
-            output = self.run_tarball_size_guard(package, binding)
+            rejected = self.tarball_size_guard_rejects(package, binding)
 
-        self.assertEqual(output, "ok")
-
-    def test_tarball_size_helper_returns_zero_for_missing_package(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            missing_package = os.path.join(tmpdir, "missing.tgz")
-            output = subprocess.check_output(
-                [
-                    "bash",
-                    "-c",
-                    self.workflow_tarball_size_helper() + '\ntarball_size "$MISSING_PACKAGE"',
-                ],
-                env=self.bash_env(**{"MISSING_PACKAGE": missing_package}),
-                text=True,
-            )
-
-        self.assertEqual(output, "0")
+        self.assertFalse(rejected)
 
 
 if __name__ == "__main__":
