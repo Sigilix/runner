@@ -11,6 +11,11 @@
       "output": "eslint.sarif"
     },
     {
+      "id": "tsc",
+      "env": "TSC_ENABLED",
+      "output": "tsc.sarif"
+    },
+    {
       "id": "ruff",
       "env": "RUFF_ENABLED",
       "output": "ruff.sarif"

@@ -9,6 +9,7 @@ KNOWN_TOOL_IDS = frozenset(
     {
         "semgrep",
         "eslint",
+        "tsc",
         "ruff",
         "pylint",
         "knip",
@@ -34,6 +35,7 @@ KNOWN_TOOL_IDS = frozenset(
 DEFAULT_TOOL_NAMES = {
     "semgrep": "Semgrep",
     "eslint": "ESLint",
+    "tsc": "TypeScript Compiler",
     "ruff": "Ruff",
     "pylint": "Pylint",
     "knip": "Knip",

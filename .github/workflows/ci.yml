@@ -18,6 +18,7 @@ jobs:
           set -euo pipefail
           python3 .github/scripts/sigilix_sarif_test.py
           python3 .github/scripts/eslint_ts_workflow_test.py
+          python3 .github/scripts/tsc_workflow_test.py
           python3 .github/scripts/pylint_workflow_test.py
           python3 .github/scripts/knip_workflow_test.py
           python3 .github/scripts/biome_workflow_test.py

@@ -20,6 +20,7 @@ Current staged catalog:
 | --- | --- | --- |
 | Semgrep | on | Native SARIF with Sigilix metadata. `semgrep-config` defaults to `auto`. |
 | ESLint | on | Safe mode by default: no repository config or plugins. Uses Sigilix-owned JavaScript/TypeScript logic, promise, and security rules; typed TypeScript promise rules turn on when a TS config is detected. Use `eslint-mode: repo-config` only when you accept executing the caller repository's ESLint config/plugins in the scan job. |
+| TypeScript Compiler | on | Converts `tsc --noEmit` diagnostics to SARIF when TypeScript configs are present. Bare external dependency-resolution noise is filtered, path-like unresolved imports stay visible as review signal, and declaration-file library checks are skipped to keep dependency noise bounded. |
 | Ruff | on | Native SARIF with Sigilix metadata. |
 | Pylint | on | Converts Pylint JSON output to SARIF. Uses a Sigilix-owned high-confidence profile: Pylint fatal/error checks only, with caller config ignored and dependency-sensitive `import-error`/`no-member` disabled. |
 | Knip | on | Converts Knip JSON output to SARIF. Uses a Sigilix-owned JavaScript/TypeScript profile for unresolved imports, unlisted dependencies, and missing package-script binaries; broad unused-export/file reports are not enabled. |
@@ -46,6 +47,7 @@ Current staged catalog:
 > `ast-grep` now defaults to `true`. Set `ast-grep: false` (boolean) in the caller workflow to suppress it.
 > `pylint` now defaults to `true`. Set `pylint: false` (boolean) in the caller workflow to suppress it.
 > `knip` now defaults to `true`. Set `knip: false` (boolean) in the caller workflow to suppress it.
+> `tsc` now defaults to `true`. Set `tsc: false` (boolean) in the caller workflow to suppress it.
 > `markdownlint`, `dotenv-linter`, and `checkmake` now default to `true`. Set the matching
 > boolean input to `false` in the caller workflow to suppress one of them.
 
@@ -87,7 +89,7 @@ a moving ref cannot prove which version of the runner ran.
 
 Default-on tool booleans: `semgrep`, `eslint`, `ruff`, `actionlint`, `shellcheck`, `yamllint`,
 `markdownlint`, `dotenv-linter`, `checkmake`, `gitleaks`, `osv-scanner`, `zizmor`, `hadolint`,
-`biome`, `oxlint`, `ast-grep`, `pylint`, and `knip`.
+`biome`, `oxlint`, `ast-grep`, `pylint`, `knip`, and `tsc`.
 
 Default-off opt-in tool booleans: `checkov`, `trivy`, `trufflehog`, and `tflint`.
 
