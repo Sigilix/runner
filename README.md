@@ -33,7 +33,7 @@ Current staged catalog:
 | Hadolint | on | Native SARIF with Sigilix metadata for Dockerfile linting. |
 | TFLint | off | Native SARIF with Sigilix metadata. Opt-in Terraform linting. |
 | Biome | off | Native SARIF with Sigilix metadata. Opt-in web source linting and format diagnostics. |
-| Oxlint | off | Native SARIF with Sigilix metadata. Opt-in Sigilix-controlled correctness linting for JavaScript and TypeScript; uses runner-owned config and disables caller Oxlint config and ignore files. |
+| Oxlint | off | Native SARIF with Sigilix metadata. Opt-in Sigilix-controlled correctness linting for JavaScript and TypeScript; uses runner-owned config, disables caller Oxlint config and ignore files, skips common generated-output directories, and checks pinned npm package integrity before scanning. |
 
 These SIG-107 slices move the runner toward broader third-party tool parity. The Sigilix
 metadata contract is currently attached to every listed tool.

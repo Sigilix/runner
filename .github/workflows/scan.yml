@@ -149,6 +149,8 @@ jobs:
       HADOLINT_VERSION: "2.14.0"
       NODE_VERSION: "22.13.0"
       OSV_SCANNER_VERSION: "2.3.8"
+      OXLINT_LINUX_X64_GNU_INTEGRITY: "sha512-Gt3KHgp46mRKz4sJeaASmKvD8ayXookRw07RMf+NowhEztGGDZ7VrXpoW96XuKJLjFukWizOFVNjmYb/u7caNQ=="
+      OXLINT_NPM_INTEGRITY: "sha512-ypZkK/aDc5NQV8zIR6s2H2Tl3aNW8FmJ1m9+2qsaYuRenl8vgnHNCGwTHviWJdUQzglOlHFchgopdtGhSy17Rw=="
       OXLINT_VERSION: "1.69.0"
       RESULT_CAP: ${{ inputs.result-cap }}
       RUFF_VERSION: "0.15.17"
@@ -549,10 +551,18 @@ jobs:
           raw="$SARIF_DIR/oxlint.raw.sarif"
           out="$SARIF_DIR/oxlint.sarif"
           oxlint_config="$RUNNER_DIR/.github/config/oxlint-sigilix.oxlintrc.jsonc"
-          oxlint_cmd=(npx --yes "oxlint@${OXLINT_VERSION}")
+          oxlint_pack_dir="$RUNNER_TEMP/oxlint-pack"
+          oxlint_install_dir="$RUNNER_TEMP/oxlint-${OXLINT_VERSION}"
+          oxlint_package="$oxlint_pack_dir/oxlint-${OXLINT_VERSION}.tgz"
+          oxlint_binding_package="$oxlint_pack_dir/oxlint-binding-linux-x64-gnu-${OXLINT_VERSION}.tgz"
+          oxlint_bin="$oxlint_install_dir/node_modules/.bin/oxlint"
           files_list="$RUNNER_TEMP/oxlint-files"
-          if ! find . -type f \( -name '*.js' -o -name '*.jsx' -o -name '*.mjs' -o -name '*.cjs' -o -name '*.ts' -o -name '*.tsx' \) \
-            -not -path './.git/*' -not -path './node_modules/*' -print0 > "$files_list"; then
+          sri_sha512() { printf 'sha512-%s' "$(openssl dgst -sha512 -binary "$1" | openssl base64 -A)"; }
+          if ! find -P . -type f \( -name '*.js' -o -name '*.jsx' -o -name '*.mjs' -o -name '*.cjs' -o -name '*.ts' -o -name '*.tsx' \) \
+            -not -path '*/.git/*' -not -path '*/node_modules/*' \
+            -not -path '*/dist/*' -not -path '*/build/*' \
+            -not -path '*/coverage/*' -not -path '*/.next/*' \
+            -not -path '*/out/*' -print0 > "$files_list"; then
             echo "::warning::oxlint file discovery failed - manifest will record missing output."
           else
             mapfile -d '' files < "$files_list"
@@ -562,7 +572,30 @@ jobs:
               echo "::warning::oxlint Sigilix config missing at $oxlint_config - manifest will record missing output."
             else
               oxlint_can_scan=true
-              if ! oxlint_version="$("${oxlint_cmd[@]}" --version 2>/dev/null)"; then
+              mkdir -p "$oxlint_pack_dir" "$oxlint_install_dir"
+              if ! npm pack --silent --pack-destination "$oxlint_pack_dir" \
+                --registry=https://registry.npmjs.org \
+                "oxlint@${OXLINT_VERSION}" "@oxlint/binding-linux-x64-gnu@${OXLINT_VERSION}" >/dev/null; then
+                echo "::warning::oxlint package download failed - manifest will record missing output."
+                oxlint_can_scan=false
+              elif [ ! -s "$oxlint_package" ] || [ ! -s "$oxlint_binding_package" ]; then
+                echo "::warning::oxlint package tarball missing after download - manifest will record missing output."
+                oxlint_can_scan=false
+              elif [ "$(sri_sha512 "$oxlint_package")" != "$OXLINT_NPM_INTEGRITY" ]; then
+                echo "::warning::oxlint package integrity mismatch - manifest will record missing output."
+                oxlint_can_scan=false
+              elif [ "$(sri_sha512 "$oxlint_binding_package")" != "$OXLINT_LINUX_X64_GNU_INTEGRITY" ]; then
+                echo "::warning::oxlint linux binding integrity mismatch - manifest will record missing output."
+                oxlint_can_scan=false
+              elif ! npm install --silent --prefix "$oxlint_install_dir" --ignore-scripts --omit=optional \
+                --registry=https://registry.npmjs.org --no-audit --no-fund \
+                "$oxlint_package" "$oxlint_binding_package"; then
+                echo "::warning::oxlint verified package install failed - manifest will record missing output."
+                oxlint_can_scan=false
+              elif [ ! -x "$oxlint_bin" ]; then
+                echo "::warning::oxlint binary missing after verified install - manifest will record missing output."
+                oxlint_can_scan=false
+              elif ! oxlint_version="$("$oxlint_bin" --version 2>/dev/null)"; then
                 oxlint_version=""
                 oxlint_can_scan=false
               else
@@ -575,7 +608,7 @@ jobs:
                 echo "::warning::oxlint version mismatch or unavailable: expected ${OXLINT_VERSION}, got '${oxlint_version:-unavailable}' - manifest will record missing output."
               fi
               if [ "$oxlint_can_scan" = true ]; then
-                if ! "${oxlint_cmd[@]}" \
+                if ! "$oxlint_bin" \
                   --config "$oxlint_config" \
                   --disable-nested-config \
                   --no-ignore \
