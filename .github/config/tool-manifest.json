@@ -74,6 +74,11 @@
       "id": "oxlint",
       "env": "OXLINT_ENABLED",
       "output": "oxlint.sarif"
+    },
+    {
+      "id": "yamllint",
+      "env": "YAMLLINT_ENABLED",
+      "output": "yamllint.sarif"
     }
   ]
 }
