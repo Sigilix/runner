@@ -604,10 +604,11 @@ class SigilixWorkflowContractTest(unittest.TestCase):
         self.assertNotIn('python3 - "$TOOL_MANIFEST"', text)
         self.assertNotIn("jq -r", text)
 
-    def test_next_batch_tool_inputs_are_explicit_default_off(self):
+    def test_opt_in_tool_inputs_are_default_off_except_oxlint(self):
         text = self.workflow_text()
 
-        for tool_id in {**NEXT_BATCH_TOOL_OUTPUTS, **LANGUAGE_SARIF_TOOL_OUTPUTS}:
+        self.assertIn("oxlint", {**NEXT_BATCH_TOOL_OUTPUTS, **LANGUAGE_SARIF_TOOL_OUTPUTS})
+        for tool_id in set({**NEXT_BATCH_TOOL_OUTPUTS, **LANGUAGE_SARIF_TOOL_OUTPUTS}) - {"oxlint"}:
             self.assertRegex(
                 text,
                 rf"\n      {re.escape(tool_id)}:\n(?:        .+\n)+?        default: false\n",
@@ -657,12 +658,12 @@ class SigilixWorkflowContractTest(unittest.TestCase):
             self.assertEqual(rows[tool_id]["env"], env_var)
             self.assertEqual(rows[tool_id]["output"], output_name)
 
-    def test_oxlint_empty_tree_emits_empty_sarif(self):
+    def test_oxlint_is_default_on_and_empty_tree_emits_empty_sarif(self):
         text = self.workflow_text()
 
+        self.assertRegex(text, r"\n      oxlint:\n(?:        [^\n]+\n)+?        default: true\n")
         self.assertIn('files_list="$RUNNER_TEMP/oxlint-files"', text)
-        self.assertIn("find -P . \\", text)
-        self.assertIn("\\( -type d \\( -name '.git' -o -name 'node_modules'", text)
+        self.assertIn("find -P . \\\n            \\( -type d \\( -name '.git' -o -name 'node_modules'", text)
         self.assertIn("-name 'dist' -o -name 'build'", text)
         self.assertIn("-name '.next' -o -name 'out' \\) -prune \\) -o", text)
         self.assertIn('printf \'{"version":"2.1.0","runs":[]}\' > "$raw"', text)

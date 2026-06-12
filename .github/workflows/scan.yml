@@ -110,7 +110,7 @@ on:
       oxlint:
         description: "Run Oxlint on JavaScript and TypeScript source files and merge its SARIF."
         required: false
-        default: false
+        default: true
         type: boolean
       yamllint:
         description: "Run YAMLlint on YAML config files with relaxed defaults."
