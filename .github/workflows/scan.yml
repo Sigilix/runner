@@ -52,6 +52,11 @@ on:
         required: false
         default: true
         type: boolean
+      pylint:
+        description: "Run Pylint with Sigilix-owned high-confidence Python error rules."
+        required: false
+        default: true
+        type: boolean
       actionlint:
         description: "Run actionlint on GitHub Actions workflow files."
         required: false
@@ -184,6 +189,7 @@ jobs:
       OXLINT_LINUX_X64_GNU_INTEGRITY: "sha512-Gt3KHgp46mRKz4sJeaASmKvD8ayXookRw07RMf+NowhEztGGDZ7VrXpoW96XuKJLjFukWizOFVNjmYb/u7caNQ=="
       OXLINT_NPM_INTEGRITY: "sha512-ypZkK/aDc5NQV8zIR6s2H2Tl3aNW8FmJ1m9+2qsaYuRenl8vgnHNCGwTHviWJdUQzglOlHFchgopdtGhSy17Rw=="
       OXLINT_VERSION: "1.69.0"
+      PYLINT_VERSION: "4.0.5"
       RESULT_CAP: ${{ inputs.result-cap }}
       RUFF_VERSION: "0.15.17"
       SARIF_BYTE_CAP: ${{ inputs.sarif-byte-cap }}
@@ -271,6 +277,13 @@ jobs:
           if [ ! -s "$raw" ]; then printf '{"version":"2.1.0","runs":[]}' > "$raw"; fi
           python3 "$RUNNER_DIR/.github/scripts/sigilix_sarif_contract.py" \
             ruff "$raw" "$out" --cap "$RESULT_CAP" --ensure-run
+
+      - name: Run Pylint to SARIF
+        if: ${{ inputs.pylint }}
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          bash "$RUNNER_DIR/.github/scripts/run_pylint.sh"
 
       - name: Run actionlint to SARIF
         if: ${{ inputs.actionlint }}
@@ -794,6 +807,7 @@ jobs:
           SEMGREP_ENABLED: ${{ inputs.semgrep }}
           ESLINT_ENABLED: ${{ inputs.eslint }}
           RUFF_ENABLED: ${{ inputs.ruff }}
+          PYLINT_ENABLED: ${{ inputs.pylint }}
           ACTIONLINT_ENABLED: ${{ inputs.actionlint }}
           SHELLCHECK_ENABLED: ${{ inputs.shellcheck }}
           GITLEAKS_ENABLED: ${{ inputs.gitleaks }}
