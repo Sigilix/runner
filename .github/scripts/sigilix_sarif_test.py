@@ -491,6 +491,7 @@ ALL_TOOL_OUTPUTS = {
     "eslint": "eslint.sarif",
     "ruff": "ruff.sarif",
     "pylint": "pylint.sarif",
+    "knip": "knip.sarif",
     "actionlint": "actionlint.sarif",
     "shellcheck": "shellcheck.sarif",
     "gitleaks": "gitleaks.sarif",

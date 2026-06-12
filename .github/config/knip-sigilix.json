@@ -1,0 +1,31 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "package.json",
+    "**/*.{js,jsx,ts,tsx,mjs,cjs,mts,cts}"
+  ],
+  "project": [
+    "**/*.{js,jsx,ts,tsx,mjs,cjs,mts,cts}"
+  ],
+  "ignore": [
+    "**/.git/**",
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/coverage/**",
+    "**/.next/**",
+    "**/out/**",
+    "**/.venv/**",
+    "**/vendor/**",
+    "**/third_party/**",
+    "**/__pycache__/**",
+    "**/__fixtures__/**",
+    "**/fixtures/**",
+    "**/generated/**",
+    "**/.tox/**",
+    "**/.mypy_cache/**",
+    "**/.pytest_cache/**",
+    "**/.terraform/**",
+    "**/*.min.js"
+  ]
+}

@@ -19,6 +19,7 @@ jobs:
           python3 .github/scripts/sigilix_sarif_test.py
           python3 .github/scripts/eslint_ts_workflow_test.py
           python3 .github/scripts/pylint_workflow_test.py
+          python3 .github/scripts/knip_workflow_test.py
           python3 .github/scripts/biome_workflow_test.py
           python3 .github/scripts/docs_config_tools_test.py
           python3 .github/scripts/oxlint_workflow_test.py

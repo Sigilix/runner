@@ -21,6 +21,11 @@
       "output": "pylint.sarif"
     },
     {
+      "id": "knip",
+      "env": "KNIP_ENABLED",
+      "output": "knip.sarif"
+    },
+    {
       "id": "actionlint",
       "env": "ACTIONLINT_ENABLED",
       "output": "actionlint.sarif"
