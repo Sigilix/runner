@@ -112,6 +112,11 @@ on:
         required: false
         default: false
         type: boolean
+      yamllint:
+        description: "Run YAMLlint on YAML config files with relaxed defaults."
+        required: false
+        default: true
+        type: boolean
       result-cap:
         description: "Maximum findings kept per Sigilix-managed deterministic tool run."
         required: false
@@ -152,6 +157,7 @@ jobs:
       TFLINT_VERSION: "0.63.1"
       TRIVY_VERSION: "0.71.0"
       TRUFFLEHOG_VERSION: "3.95.5"
+      YAMLLINT_VERSION: "1.37.1"
       ZIZMOR_VERSION: "1.25.2"
       SARIF_DIR: ${{ github.workspace }}/sarif
       SOURCE_DIR: ${{ github.workspace }}/source
@@ -291,6 +297,48 @@ jobs:
             printf '{"comments":[]}' > "$json"
           fi
           python3 "$RUNNER_DIR/.github/scripts/shellcheck_to_sarif.py" "$json" "$out" \
+            --base-dir "$SOURCE_DIR" --cap "$RESULT_CAP"
+
+      - name: Run YAMLlint to SARIF
+        if: ${{ inputs.yamllint }}
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          raw="$SARIF_DIR/yamllint.txt"
+          out="$SARIF_DIR/yamllint.sarif"
+          yamllint_venv="$RUNNER_TEMP/yamllint-venv"
+          yamllint_python="$yamllint_venv/bin/python"
+          files_list=""
+          cleanup_yamllint() {
+            rm -rf "$yamllint_venv"
+            if [ -n "$files_list" ]; then rm -f "$files_list"; fi
+          }
+          trap cleanup_yamllint EXIT
+          if ! python3 -m venv "$yamllint_venv"; then
+            echo "::warning::yamllint venv creation failed - emitting empty YAMLlint SARIF run."
+            : > "$raw"
+          elif ! "$yamllint_python" -m pip install --quiet "yamllint==${YAMLLINT_VERSION}"; then
+            echo "::warning::yamllint install failed - emitting empty YAMLlint SARIF run."
+            : > "$raw"
+          else
+            files_list="$(mktemp "$RUNNER_TEMP/yamllint-files.XXXXXX")"
+            if ! find . -type f \( -name '*.yaml' -o -name '*.yml' \) \
+              -not -path './.git/*' -not -path './node_modules/*' -print0 > "$files_list"; then
+              echo "::warning::yamllint file discovery failed - emitting empty YAMLlint SARIF run."
+              : > "$raw"
+            else
+              files=()
+              while IFS= read -r -d '' file; do
+                files+=("$file")
+              done < "$files_list"
+              if [ "${#files[@]}" -eq 0 ]; then
+                : > "$raw"
+              else
+                "$yamllint_python" -m yamllint -d relaxed -f parsable -- "${files[@]}" > "$raw" || true
+              fi
+            fi
+          fi
+          python3 "$RUNNER_DIR/.github/scripts/yamllint_to_sarif.py" "$raw" "$out" \
             --base-dir "$SOURCE_DIR" --cap "$RESULT_CAP"
 
       - name: Run gitleaks to SARIF
@@ -532,6 +580,7 @@ jobs:
           TFLINT_ENABLED: ${{ inputs.tflint }}
           BIOME_ENABLED: ${{ inputs.biome }}
           OXLINT_ENABLED: ${{ inputs.oxlint }}
+          YAMLLINT_ENABLED: ${{ inputs.yamllint }}
         run: |
           set -euo pipefail
           python3 "$RUNNER_DIR/.github/scripts/sigilix_scan_manifest.py" \

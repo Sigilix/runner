@@ -429,11 +429,13 @@ class SigilixScanManifestTest(unittest.TestCase):
             manifest = build_scan_manifest(
                 [
                     (tool_id, True, os.path.join(tmpdir, f"{tool_id}.sarif"))
-                    for tool_id in {**NEXT_BATCH_TOOL_OUTPUTS, **LANGUAGE_SARIF_TOOL_OUTPUTS}
+                    for tool_id in {**NEXT_BATCH_TOOL_OUTPUTS, **LANGUAGE_SARIF_TOOL_OUTPUTS, **CONFIG_TOOL_OUTPUTS}
                 ]
             )
 
-        expected = {tool_id: "missing-output" for tool_id in {**NEXT_BATCH_TOOL_OUTPUTS, **LANGUAGE_SARIF_TOOL_OUTPUTS}}
+        expected = {
+            tool_id: "missing-output" for tool_id in {**NEXT_BATCH_TOOL_OUTPUTS, **LANGUAGE_SARIF_TOOL_OUTPUTS, **CONFIG_TOOL_OUTPUTS}
+        }
         self.assertEqual({tool["toolId"]: tool["status"] for tool in manifest["tools"]}, expected)
         self.assertEqual(
             manifest["summary"],
@@ -473,6 +475,10 @@ LANGUAGE_SARIF_TOOL_OUTPUTS = {
     "oxlint": "oxlint.sarif",
 }
 
+CONFIG_TOOL_OUTPUTS = {
+    "yamllint": "yamllint.sarif",
+}
+
 ALL_TOOL_OUTPUTS = {
     "semgrep": "semgrep.sarif",
     "eslint": "eslint.sarif",
@@ -483,6 +489,7 @@ ALL_TOOL_OUTPUTS = {
     "osv-scanner": "osv.sarif",
     **NEXT_BATCH_TOOL_OUTPUTS,
     **LANGUAGE_SARIF_TOOL_OUTPUTS,
+    **CONFIG_TOOL_OUTPUTS,
 }
 
 
@@ -576,10 +583,19 @@ class SigilixWorkflowContractTest(unittest.TestCase):
                 rf"\n      {re.escape(tool_id)}:\n(?:        .+\n)+?        default: false\n",
             )
 
+    def test_yamllint_is_default_on_for_config_feedback(self):
+        text = self.workflow_text()
+        rows = {row["id"]: row for row in self.tool_manifest()}
+
+        self.assertRegex(text, r"\n      yamllint:\n(?:        .+\n)+?        default: true\n")
+        self.assertIn("YAMLLINT_ENABLED: ${{ inputs.yamllint }}", text)
+        self.assertEqual(rows["yamllint"]["env"], "YAMLLINT_ENABLED")
+        self.assertEqual(rows["yamllint"]["output"], "yamllint.sarif")
+
     def test_next_batch_tool_outputs_are_manifested_and_merged(self):
         rows = {row["id"]: row for row in self.tool_manifest()}
 
-        for tool_id, output_name in {**NEXT_BATCH_TOOL_OUTPUTS, **LANGUAGE_SARIF_TOOL_OUTPUTS}.items():
+        for tool_id, output_name in {**NEXT_BATCH_TOOL_OUTPUTS, **LANGUAGE_SARIF_TOOL_OUTPUTS, **CONFIG_TOOL_OUTPUTS}.items():
             env_var = tool_id.upper().replace("-", "_") + "_ENABLED"
             self.assertEqual(rows[tool_id]["env"], env_var)
             self.assertEqual(rows[tool_id]["output"], output_name)
@@ -779,6 +795,42 @@ class ConverterTest(unittest.TestCase):
         result = document["runs"][0]["results"][0]
         self.assertEqual(result["locations"][0]["physicalLocation"]["artifactLocation"]["uri"], "secrets.env")
         self.assertNotIn("region", result["locations"][0]["physicalLocation"])
+
+    def test_yamllint_parsable_output_converts_to_sarif(self):
+        from yamllint_to_sarif import convert_yamllint_output
+
+        document = convert_yamllint_output(
+            './config/bad.yaml:2:1: [error] syntax error: expected node content (syntax)\n'
+            './config/style.yaml:5:7: [warning] too many spaces inside braces (allowed in flow style) (braces)\n',
+            base_dir="/repo",
+        )
+
+        self.assert_sigilix_properties(document, "yamllint")
+        results = document["runs"][0]["results"]
+        self.assertEqual([result["ruleId"] for result in results], ["syntax", "braces"])
+        self.assertEqual([result["level"] for result in results], ["error", "warning"])
+        self.assertEqual(results[1]["message"]["text"], "too many spaces inside braces (allowed in flow style)")
+        self.assertEqual(results[0]["locations"][0]["physicalLocation"]["artifactLocation"]["uri"], "config/bad.yaml")
+        self.assertEqual(results[0]["locations"][0]["physicalLocation"]["region"], {"startLine": 2, "startColumn": 1})
+
+    def test_yamllint_converter_handles_colons_in_paths(self):
+        from yamllint_to_sarif import convert_yamllint_output
+
+        document = convert_yamllint_output("./config/has:colon.yaml:9:3: [error] bad yaml (syntax)")
+
+        result = document["runs"][0]["results"][0]
+        self.assertEqual(result["locations"][0]["physicalLocation"]["artifactLocation"]["uri"], "config/has:colon.yaml")
+        self.assertEqual(result["locations"][0]["physicalLocation"]["region"], {"startLine": 9, "startColumn": 3})
+
+    def test_yamllint_converter_ignores_empty_and_unparsable_lines(self):
+        from yamllint_to_sarif import convert_yamllint_output
+
+        self.assertEqual(convert_yamllint_output("")["runs"][0]["results"], [])
+        document = convert_yamllint_output(
+            "not a yamllint line\n./config/bad.yaml:2:1: [error] syntax error (syntax)\n",
+            base_dir="/repo",
+        )
+        self.assertEqual(len(document["runs"][0]["results"]), 1)
 
     def test_normalize_path_falls_back_for_paths_outside_base_dir(self):
         self.assertEqual(normalize_path("/repo/src/app.js", base_dir="/repo"), "src/app.js")

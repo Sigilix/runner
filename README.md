@@ -23,6 +23,7 @@ Current staged catalog:
 | Ruff | on | Native SARIF with Sigilix metadata. |
 | actionlint | on | Converts actionlint JSON to SARIF for GitHub Actions workflows. |
 | ShellCheck | on | Converts ShellCheck `json1` output to SARIF. |
+| YAMLlint | on | Converts YAMLlint parsable output to SARIF with relaxed defaults for config feedback. |
 | gitleaks | on | Native SARIF with Sigilix metadata. |
 | osv-scanner | on | Native SARIF with Sigilix metadata. |
 | Checkov | off | Native SARIF with Sigilix metadata. Opt-in IaC scanning. |
@@ -70,8 +71,8 @@ a moving ref cannot prove which version of the runner ran.
 
 ### Inputs
 
-Default-on tool booleans: `semgrep`, `eslint`, `ruff`, `actionlint`, `shellcheck`, `gitleaks`,
-and `osv-scanner`.
+Default-on tool booleans: `semgrep`, `eslint`, `ruff`, `actionlint`, `shellcheck`, `yamllint`,
+`gitleaks`, and `osv-scanner`.
 
 Default-off opt-in tool booleans: `checkov`, `trivy`, `trufflehog`, `zizmor`, `hadolint`, and
 `tflint`, `biome`, and `oxlint`.

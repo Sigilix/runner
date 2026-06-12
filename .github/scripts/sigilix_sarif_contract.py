@@ -22,6 +22,7 @@ KNOWN_TOOL_IDS = frozenset(
         "tflint",
         "biome",
         "oxlint",
+        "yamllint",
     }
 )
 DEFAULT_TOOL_NAMES = {
@@ -40,6 +41,7 @@ DEFAULT_TOOL_NAMES = {
     "tflint": "TFLint",
     "biome": "Biome",
     "oxlint": "Oxlint",
+    "yamllint": "YAMLlint",
 }
 
 _SEVERITY_RANKS = {
