@@ -79,6 +79,21 @@
       "id": "yamllint",
       "env": "YAMLLINT_ENABLED",
       "output": "yamllint.sarif"
+    },
+    {
+      "id": "markdownlint",
+      "env": "MARKDOWNLINT_ENABLED",
+      "output": "markdownlint.sarif"
+    },
+    {
+      "id": "dotenv-linter",
+      "env": "DOTENV_LINTER_ENABLED",
+      "output": "dotenv-linter.sarif"
+    },
+    {
+      "id": "checkmake",
+      "env": "CHECKMAKE_ENABLED",
+      "output": "checkmake.sarif"
     }
   ]
 }

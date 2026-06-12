@@ -478,9 +478,7 @@ LANGUAGE_SARIF_TOOL_OUTPUTS = {
     "oxlint": "oxlint.sarif",
 }
 
-CONFIG_TOOL_OUTPUTS = {
-    "yamllint": "yamllint.sarif",
-}
+CONFIG_TOOL_OUTPUTS = {"yamllint": "yamllint.sarif", "markdownlint": "markdownlint.sarif", "dotenv-linter": "dotenv-linter.sarif", "checkmake": "checkmake.sarif"}
 
 CI_SECURITY_TOOL_OUTPUTS = {
     "zizmor": "zizmor.sarif",
@@ -993,6 +991,7 @@ class ConverterTest(unittest.TestCase):
         self.assertEqual(normalize_path("/repo/src/app.js", base_dir="/repo"), "src/app.js")
         self.assertEqual(normalize_path("/etc/passwd", base_dir="/repo"), "passwd")
         self.assertEqual(normalize_path("../secret.txt", base_dir="/repo"), "secret.txt")
+        self.assertEqual(normalize_path("sub/../../secret.txt", base_dir="/repo"), "secret.txt")
         self.assertEqual(normalize_path("", base_dir="/repo"), ".")
 
 
