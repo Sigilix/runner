@@ -201,6 +201,15 @@ class LanguageConfigToolsConverterTest(unittest.TestCase):
         self.assertEqual(results[0]["locations"][0]["physicalLocation"]["artifactLocation"]["uri"], "app.py")
         self.assertEqual(results[0]["locations"][0]["physicalLocation"]["region"], {"startLine": 2, "startColumn": 9})
 
+    def test_flake8_level_mapping_is_limited_to_e9_parse_errors(self):
+        from flake8_to_sarif import _level_for_code
+
+        self.assertEqual(_level_for_code("E999"), "error")
+        self.assertEqual(_level_for_code("e901"), "error")
+        self.assertEqual(_level_for_code("E101"), "warning")
+        self.assertEqual(_level_for_code("F401"), "warning")
+        self.assertEqual(_level_for_code("W503"), "warning")
+
     def test_stylelint_json_converts_to_sarif(self):
         from stylelint_to_sarif import convert_stylelint_json
 

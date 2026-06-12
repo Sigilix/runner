@@ -40,7 +40,7 @@ def _int_or_none(value):
 
 
 def _level_for_code(code):
-    return "error" if str(code or "").startswith("E9") else "warning"
+    return "error" if str(code or "").upper().startswith("E9") else "warning"
 
 
 def _main(argv):
