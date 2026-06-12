@@ -92,6 +92,47 @@ on:
         required: false
         default: true
         type: boolean
+      buf:
+        description: "Run Buf on Protobuf files and merge its SARIF."
+        required: false
+        default: true
+        type: boolean
+      sqlfluff:
+        description: "Run SQLFluff on SQL files and merge its SARIF."
+        default: true
+        type: boolean
+      prisma-lint:
+        description: "Run Prisma Lint on Prisma schema files and merge its SARIF."
+        default: true
+        type: boolean
+      rubocop:
+        description: "Run RuboCop on Ruby files and merge its SARIF."
+        default: true
+        type: boolean
+      phpstan:
+        description: "Run PHPStan on PHP files and merge its SARIF."
+        default: true
+        type: boolean
+      phpmd:
+        description: "Run PHPMD on PHP files and merge its SARIF."
+        default: true
+        type: boolean
+      phpcs:
+        description: "Run PHPCS on PHP files and merge its SARIF."
+        default: true
+        type: boolean
+      clippy:
+        description: "Run Clippy on Rust projects and merge its SARIF."
+        default: true
+        type: boolean
+      detekt:
+        description: "Run detekt on Kotlin files and merge its SARIF."
+        default: true
+        type: boolean
+      swiftlint:
+        description: "Run SwiftLint on Swift files and merge its SARIF."
+        default: true
+        type: boolean
       actionlint:
         description: "Run actionlint on GitHub Actions workflow files."
         required: false
@@ -223,9 +264,13 @@ jobs:
       BRAKEMAN_GEM_SHA256: "7bf921fa9638544835df9aa7b3e720a9a72c0267f34f92135955edd80d4dcf6f"
       BIOME_VERSION: "2.4.16"
       BRAKEMAN_VERSION: "8.0.4"
+      BUF_LINUX_X86_64_SHA256: "e2bbcdd324da09c16a15963dc2dae0525c955c05dc118223cf732f4f7509c5e6"
+      BUF_VERSION: "1.70.0"
       CHECKMAKE_LINUX_AMD64_SHA256: "e2effb876913f3ee2caef0ba35f6202c5e8a3cd55a077d8d2b9ce2034257b6af"
       CHECKMAKE_VERSION: "0.3.2"
       CHECKOV_VERSION: "3.3.1"
+      DETEKT_CLI_ALL_JAR_SHA256: "2ce2ff952e150baf28a29cda70a363b0340b3e81a55f43e51ec5edffc3d066c1"
+      DETEKT_VERSION: "1.23.8"
       DETECT_LIBC_NPM_INTEGRITY: "sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ=="
       DETECT_LIBC_VERSION: "2.1.2"
       DOTENV_LINTER_LINUX_X86_64_SHA256: "9e2f1f6eb88a71ac15ef209f78f5a68644db82f132d2677112b4f80ec2bd2127"
@@ -250,18 +295,27 @@ jobs:
       OXLINT_LINUX_X64_GNU_INTEGRITY: "sha512-Gt3KHgp46mRKz4sJeaASmKvD8ayXookRw07RMf+NowhEztGGDZ7VrXpoW96XuKJLjFukWizOFVNjmYb/u7caNQ=="
       OXLINT_NPM_INTEGRITY: "sha512-ypZkK/aDc5NQV8zIR6s2H2Tl3aNW8FmJ1m9+2qsaYuRenl8vgnHNCGwTHviWJdUQzglOlHFchgopdtGhSy17Rw=="
       OXLINT_VERSION: "1.69.0"
+      PHPCS_VERSION: "4.0.1"
+      PHPMD_VERSION: "2.15.0"
+      PHPSTAN_VERSION: "2.2.2"
+      PRISMA_LINT_NPM_INTEGRITY: "sha512-GCq58O+E7KpqIgir8B160irZ57SBixo7R2JpS9A1NPOsWlxWFTxshg7z5wg5t2LEhAKYc1xW9ToiD7a6ICh0Qg=="
+      PRISMA_LINT_VERSION: "0.13.1"
       PYLINT_VERSION: "4.0.5"
       RACC_GEM_SHA256: "4a7f6929691dbec8b5209a0b373bc2614882b55fc5d2e447a21aaa691303d62f"
       RACC_VERSION: "1.8.1"
       REGAL_LINUX_X86_64_SHA256: "6769dcd8e88bc5ba5ff4fac500e4a99d55b3eec3d1d0842833d84f6820a2a80f"
       REGAL_VERSION: "0.41.1"
       RESULT_CAP: ${{ inputs.result-cap }}
+      RUBOCOP_VERSION: "1.86.2"
       RUFF_VERSION: "0.15.17"
       SARIF_BYTE_CAP: ${{ inputs.sarif-byte-cap }}
       SEMGREP_VERSION: "1.166.0"
       SHELLCHECK_VERSION: "0.11.0"
       STYLELINT_NPM_INTEGRITY: "sha512-KIlzWXMHUvgfPUR0R7TK3H80yCIi0uoivUwf+6Az4yrHJD1Q3c1qIkh/H5Z0i/K3QXgtq/UMEkWyBUSUwnpnOg=="
       STYLELINT_VERSION: "17.12.0"
+      SQLFLUFF_VERSION: "4.2.1"
+      SWIFTLINT_LINUX_AMD64_SHA256: "26db741d43f2f2dc26c0cf16911100a3e186c3d1dbb59e55ad3ac87b0de4538f"
+      SWIFTLINT_VERSION: "0.63.3"
       TFLINT_LINUX_AMD64_SHA256: "8441a7d97df20431f19c9b9d27ff4c63e308c964e86660bc7cc0cf7bbe0725e8"
       TFLINT_VERSION: "0.63.1"
       TRIVY_VERSION: "0.71.0"
@@ -397,6 +451,32 @@ jobs:
           set -euo pipefail
           cd "$SOURCE_DIR"
           bash "$RUNNER_DIR/.github/scripts/run_golangci_lint.sh"
+
+      - name: Run Buf to SARIF
+        if: ${{ inputs.buf }}
+        env:
+          BUF_ENABLED: ${{ inputs.buf }}
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          bash "$RUNNER_DIR/.github/scripts/run_buf.sh"
+
+      - name: Run high-impact language tools to SARIF
+        if: ${{ inputs.sqlfluff || inputs.prisma-lint || inputs.rubocop || inputs.phpstan || inputs.phpmd || inputs.phpcs || inputs.clippy || inputs.detekt || inputs.swiftlint }}
+        env:
+          SQLFLUFF_ENABLED: ${{ inputs.sqlfluff }}
+          PRISMA_LINT_ENABLED: ${{ inputs.prisma-lint }}
+          RUBOCOP_ENABLED: ${{ inputs.rubocop }}
+          PHPSTAN_ENABLED: ${{ inputs.phpstan }}
+          PHPMD_ENABLED: ${{ inputs.phpmd }}
+          PHPCS_ENABLED: ${{ inputs.phpcs }}
+          CLIPPY_ENABLED: ${{ inputs.clippy }}
+          DETEKT_ENABLED: ${{ inputs.detekt }}
+          SWIFTLINT_ENABLED: ${{ inputs.swiftlint }}
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          bash "$RUNNER_DIR/.github/scripts/run_high_impact_language_tools.sh"
 
       - name: Run actionlint to SARIF
         if: ${{ inputs.actionlint }}
@@ -756,98 +836,7 @@ jobs:
         run: |
           set -euo pipefail
           cd "$SOURCE_DIR"
-          raw="$SARIF_DIR/oxlint.raw.sarif"
-          out="$SARIF_DIR/oxlint.sarif"
-          oxlint_config="$RUNNER_DIR/.github/config/oxlint-sigilix.oxlintrc.jsonc"
-          oxlint_pack_dir="$RUNNER_TEMP/oxlint-pack"
-          oxlint_install_dir="$RUNNER_TEMP/oxlint-${OXLINT_VERSION}"
-          oxlint_package="$oxlint_pack_dir/oxlint-${OXLINT_VERSION}.tgz"
-          oxlint_binding_package="$oxlint_pack_dir/oxlint-binding-linux-x64-gnu-${OXLINT_VERSION}.tgz"
-          oxlint_bin="$oxlint_install_dir/node_modules/.bin/oxlint"
-          files_list="$RUNNER_TEMP/oxlint-files"
-          sri_sha512() { printf 'sha512-%s' "$(openssl dgst -sha512 -binary "$1" | openssl base64 -A)"; }
-          tarball_size() {
-            if [ ! -r "$1" ]; then
-              printf '0'
-              return
-            fi
-            wc -c < "$1" | tr -d '[:space:]'
-          }
-          if ! find -P . \
-            \( -type d \( -name '.git' -o -name 'node_modules' -o -name 'dist' -o -name 'build' \
-            -o -name 'coverage' -o -name '.next' -o -name 'out' \) -prune \) -o \
-            \( -type f \( -name '*.js' -o -name '*.jsx' -o -name '*.mjs' -o -name '*.cjs' \
-            -o -name '*.ts' -o -name '*.tsx' \) -print0 \) > "$files_list"; then
-            echo "::warning::oxlint file discovery failed - manifest will record missing output."
-          else
-            mapfile -d '' files < "$files_list"
-            if [ "${#files[@]}" -eq 0 ]; then
-              printf '{"version":"2.1.0","runs":[]}' > "$raw"
-            elif [ ! -f "$oxlint_config" ]; then
-              echo "::warning::oxlint Sigilix config missing at $oxlint_config - manifest will record missing output."
-            else
-              oxlint_can_scan=true
-              mkdir -p "$oxlint_pack_dir" "$oxlint_install_dir"
-              if ! npm pack --silent --pack-destination "$oxlint_pack_dir" \
-                --registry=https://registry.npmjs.org \
-                "oxlint@${OXLINT_VERSION}" "@oxlint/binding-linux-x64-gnu@${OXLINT_VERSION}" >/dev/null; then
-                echo "::warning::oxlint package download failed - manifest will record missing output."
-                oxlint_can_scan=false
-              elif [ ! -s "$oxlint_package" ] || [ ! -s "$oxlint_binding_package" ]; then
-                echo "::warning::oxlint package tarball missing after download - manifest will record missing output."
-                oxlint_can_scan=false
-              elif [ "$(tarball_size "$oxlint_package")" -le 1024 ] \
-                || [ "$(tarball_size "$oxlint_binding_package")" -le 1024 ]; then
-                echo "::warning::oxlint package tarball at or below 1024 bytes after download - manifest will record missing output."
-                oxlint_can_scan=false
-              elif [ "$(sri_sha512 "$oxlint_package")" != "$OXLINT_NPM_INTEGRITY" ]; then
-                echo "::warning::oxlint package integrity mismatch - manifest will record missing output."
-                oxlint_can_scan=false
-              elif [ "$(sri_sha512 "$oxlint_binding_package")" != "$OXLINT_LINUX_X64_GNU_INTEGRITY" ]; then
-                echo "::warning::oxlint linux binding integrity mismatch - manifest will record missing output."
-                oxlint_can_scan=false
-              elif ! npm install --silent --prefix "$oxlint_install_dir" --ignore-scripts --omit=optional \
-                --registry=https://registry.npmjs.org --no-audit --no-fund \
-                "$oxlint_package" "$oxlint_binding_package"; then
-                echo "::warning::oxlint verified package install failed - manifest will record missing output."
-                oxlint_can_scan=false
-              elif [ ! -x "$oxlint_bin" ]; then
-                echo "::warning::oxlint binary missing after verified install - manifest will record missing output."
-                oxlint_can_scan=false
-              elif ! oxlint_version="$("$oxlint_bin" --version 2>/dev/null)"; then
-                oxlint_version=""
-                oxlint_can_scan=false
-              else
-                oxlint_detected_version="$(printf '%s\n' "$oxlint_version" | sed -nE 's/.*([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' | head -n 1)"
-                if [ "$oxlint_detected_version" != "$OXLINT_VERSION" ]; then
-                  oxlint_can_scan=false
-                fi
-              fi
-              if [ "$oxlint_can_scan" = false ]; then
-                echo "::warning::oxlint version mismatch or unavailable: expected ${OXLINT_VERSION}, got '${oxlint_version:-unavailable}' - manifest will record missing output."
-              fi
-              if [ "$oxlint_can_scan" = true ]; then
-                if ! "$oxlint_bin" \
-                  --config "$oxlint_config" \
-                  --disable-nested-config \
-                  --no-ignore \
-                  -A all -D correctness \
-                  --format sarif \
-                  --no-error-on-unmatched-pattern \
-                  -- \
-                  "${files[@]}" > "$raw"; then
-                  if [ ! -s "$raw" ]; then
-                    echo "::warning::oxlint scan failed and produced no SARIF output - manifest will record missing output."
-                  fi
-                fi
-              fi
-            fi
-            if [ -s "$raw" ]; then
-              python3 "$RUNNER_DIR/.github/scripts/sigilix_sarif_contract.py" \
-                oxlint "$raw" "$out" --cap "$RESULT_CAP" --ensure-run \
-                || echo "::warning::oxlint SARIF normalization failed - manifest will record missing output."
-            fi
-          fi
+          bash "$RUNNER_DIR/.github/scripts/run_oxlint.sh"
 
       - name: Run ast-grep to SARIF
         if: ${{ inputs.ast-grep }}
@@ -882,6 +871,16 @@ jobs:
           FLAKE8_ENABLED: ${{ inputs.flake8 }}
           KNIP_ENABLED: ${{ inputs.knip }}
           GOLANGCI_LINT_ENABLED: ${{ inputs.golangci-lint }}
+          BUF_ENABLED: ${{ inputs.buf }}
+          SQLFLUFF_ENABLED: ${{ inputs.sqlfluff }}
+          PRISMA_LINT_ENABLED: ${{ inputs.prisma-lint }}
+          RUBOCOP_ENABLED: ${{ inputs.rubocop }}
+          PHPSTAN_ENABLED: ${{ inputs.phpstan }}
+          PHPMD_ENABLED: ${{ inputs.phpmd }}
+          PHPCS_ENABLED: ${{ inputs.phpcs }}
+          CLIPPY_ENABLED: ${{ inputs.clippy }}
+          DETEKT_ENABLED: ${{ inputs.detekt }}
+          SWIFTLINT_ENABLED: ${{ inputs.swiftlint }}
           ACTIONLINT_ENABLED: ${{ inputs.actionlint }}
           SHELLCHECK_ENABLED: ${{ inputs.shellcheck }}
           GITLEAKS_ENABLED: ${{ inputs.gitleaks }}
