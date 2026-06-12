@@ -28,7 +28,7 @@ Current staged catalog:
 | osv-scanner | on | Native SARIF with Sigilix metadata. |
 | Checkov | off | Native SARIF with Sigilix metadata. Opt-in IaC scanning. |
 | Trivy | off | Native SARIF with Sigilix metadata. Opt-in filesystem vulnerability, secret, misconfiguration, and license scanning. |
-| TruffleHog | off | Converts TruffleHog JSON output to SARIF. Secret verification is disabled in CI to avoid provider calls with discovered credentials. |
+| TruffleHog | off | Converts TruffleHog JSON output to SARIF. Secret verification is disabled in CI to avoid provider calls with discovered credentials; unverified or unverifiable hits are warning-level and metadata-only duplicates are collapsed without comparing secret values. |
 | zizmor | on | Native SARIF with Sigilix metadata for GitHub Actions security scanning. |
 | Hadolint | on | Native SARIF with Sigilix metadata for Dockerfile linting. |
 | TFLint | off | Native SARIF with Sigilix metadata. Opt-in Terraform linting. |

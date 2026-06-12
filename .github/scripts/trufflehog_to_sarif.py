@@ -12,24 +12,26 @@ TRUFFLEHOG_INFORMATION_URI = "https://github.com/trufflesecurity/trufflehog"
 
 def convert_trufflehog_json(data, base_dir=".", cap=None):
     results = []
-    for finding in _findings(data):
+    for index, finding in enumerate(_findings(data)):
+        dedupe_discriminator = index if _has_secret_payload(finding) else None
         finding = _without_secret_values(finding)
         rule_id = str(finding.get("DetectorName") or finding.get("DetectorType") or "trufflehog")
         path, line = _source_location(finding)
-        results.append(
-            make_result(
-                rule_id,
-                "error",
-                _message(finding, rule_id),
-                path,
-                line=line,
-                base_dir=base_dir,
-            )
+        verified = _is_verified(finding.get("Verified"))
+        result = make_result(
+            rule_id,
+            "error" if verified else "warning",
+            _message(rule_id),
+            path,
+            line=line,
+            base_dir=base_dir,
         )
+        result["properties"] = {"trufflehogVerified": verified}
+        results.append((result, dedupe_discriminator))
     return make_document(
         TRUFFLEHOG_TOOL_NAME,
         TRUFFLEHOG_TOOL_ID,
-        results,
+        _dedupe_results(results),
         information_uri=TRUFFLEHOG_INFORMATION_URI,
         cap=cap,
     )
@@ -71,8 +73,50 @@ def _parse_text(text):
     return findings
 
 
-def _message(finding, rule_id):
+def _message(rule_id):
     return f"TruffleHog found {rule_id} secret"
+
+
+def _dedupe_results(results):
+    deduped = {}
+    for result, dedupe_discriminator in results:
+        key = _dedupe_key(result, dedupe_discriminator)
+        existing = deduped.get(key)
+        if existing is None or (existing.get("level") != "error" and result.get("level") == "error"):
+            deduped[key] = result
+    return list(deduped.values())
+
+
+def _dedupe_key(result, dedupe_discriminator):
+    physical = result["locations"][0]["physicalLocation"]
+    artifact = physical["artifactLocation"]
+    region = physical.get("region") or {}
+    return (result.get("ruleId"), artifact.get("uri"), region.get("startLine"), dedupe_discriminator)
+
+
+def _has_secret_payload(finding):
+    for key in ("Raw", "RawV2", "Redacted", "ExtraData", "StructuredData"):
+        if _has_payload_value(finding.get(key)):
+            return True
+    return False
+
+
+def _has_payload_value(value):
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, dict):
+        return any(_has_payload_value(child) for child in value.values())
+    if isinstance(value, list):
+        return any(_has_payload_value(child) for child in value)
+    return True
+
+
+def _is_verified(value):
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes")
+    return value == True
 
 
 def _without_secret_values(finding):
