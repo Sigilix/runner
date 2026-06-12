@@ -27,6 +27,7 @@ jobs:
           python3 .github/scripts/docs_config_tools_test.py
           python3 .github/scripts/oxlint_workflow_test.py
           python3 .github/scripts/ast_grep_workflow_test.py
+          python3 .github/scripts/policy_iac_tools_workflow_test.py
           python3 -m py_compile .github/scripts/*.py
 
   lint:

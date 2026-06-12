@@ -142,6 +142,11 @@ on:
         required: false
         default: true
         type: boolean
+      regal:
+        description: "Run Regal on Rego policy files with Sigilix-controlled bug and import rules."
+        required: false
+        default: true
+        type: boolean
       htmlhint:
         description: "Run HTMLHint on HTML files with Sigilix-controlled correctness rules."
         required: false
@@ -226,6 +231,8 @@ jobs:
       OXLINT_NPM_INTEGRITY: "sha512-ypZkK/aDc5NQV8zIR6s2H2Tl3aNW8FmJ1m9+2qsaYuRenl8vgnHNCGwTHviWJdUQzglOlHFchgopdtGhSy17Rw=="
       OXLINT_VERSION: "1.69.0"
       PYLINT_VERSION: "4.0.5"
+      REGAL_LINUX_X86_64_SHA256: "6769dcd8e88bc5ba5ff4fac500e4a99d55b3eec3d1d0842833d84f6820a2a80f"
+      REGAL_VERSION: "0.41.1"
       RESULT_CAP: ${{ inputs.result-cap }}
       RUFF_VERSION: "0.15.17"
       SARIF_BYTE_CAP: ${{ inputs.sarif-byte-cap }}
@@ -656,54 +663,14 @@ jobs:
         run: |
           set -euo pipefail
           cd "$SOURCE_DIR"
-          raw="$SARIF_DIR/zizmor.raw.sarif"
-          out="$SARIF_DIR/zizmor.sarif"
-          if [ ! -d .github/workflows ]; then
-            printf '{"version":"2.1.0","runs":[]}' > "$raw"
-          elif ! python3 -m pip install --quiet "zizmor==${ZIZMOR_VERSION}"; then
-            echo "::warning::zizmor install failed - manifest will record missing output."
-          else
-            zizmor --format sarif . > "$raw" || true
-            if [ ! -s "$raw" ]; then printf '{"version":"2.1.0","runs":[]}' > "$raw"; fi
-          fi
-          if [ -s "$raw" ]; then
-            python3 "$RUNNER_DIR/.github/scripts/sigilix_sarif_contract.py" \
-              zizmor "$raw" "$out" --cap "$RESULT_CAP" --ensure-run \
-              || echo "::warning::zizmor SARIF normalization failed - manifest will record missing output."
-          fi
+          bash "$RUNNER_DIR/.github/scripts/run_zizmor.sh"
 
       - name: Run Hadolint to SARIF
         if: ${{ inputs.hadolint }}
         run: |
           set -euo pipefail
           cd "$SOURCE_DIR"
-          raw="$SARIF_DIR/hadolint.raw.sarif"
-          out="$SARIF_DIR/hadolint.sarif"
-          if ! curl -fsSL -o "$RUNNER_TEMP/hadolint" \
-            "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-linux-x86_64"; then
-            echo "::warning::hadolint download failed - manifest will record missing output."
-          else
-            if ! chmod +x "$RUNNER_TEMP/hadolint"; then
-              echo "::warning::hadolint chmod failed - manifest will record missing output."
-            else
-              files_list="$RUNNER_TEMP/hadolint-files"
-              if ! find . -type f \( -name 'Dockerfile' -o -name 'Dockerfile.*' \) \
-                -not -path './.git/*' -not -path './node_modules/*' -print0 > "$files_list"; then
-                echo "::warning::hadolint file discovery failed - manifest will record missing output."
-              else
-                mapfile -d '' files < "$files_list"
-                if [ "${#files[@]}" -eq 0 ]; then
-                  printf '{"version":"2.1.0","runs":[]}' > "$raw"
-                else
-                  "$RUNNER_TEMP/hadolint" --no-fail --format sarif "${files[@]}" > "$raw" || true
-                  if [ ! -s "$raw" ]; then printf '{"version":"2.1.0","runs":[]}' > "$raw"; fi
-                fi
-                python3 "$RUNNER_DIR/.github/scripts/sigilix_sarif_contract.py" \
-                  hadolint "$raw" "$out" --cap "$RESULT_CAP" --ensure-run \
-                  || echo "::warning::hadolint SARIF normalization failed - manifest will record missing output."
-              fi
-            fi
-          fi
+          bash "$RUNNER_DIR/.github/scripts/run_hadolint.sh"
 
       - name: Run TFLint to SARIF
         if: ${{ inputs.tflint }}
@@ -711,6 +678,13 @@ jobs:
           set -euo pipefail
           cd "$SOURCE_DIR"
           bash "$RUNNER_DIR/.github/scripts/run_tflint.sh"
+
+      - name: Run Regal to SARIF
+        if: ${{ inputs.regal }}
+        run: |
+          set -euo pipefail
+          cd "$SOURCE_DIR"
+          bash "$RUNNER_DIR/.github/scripts/run_regal.sh"
 
       - name: Run Biome to SARIF
         if: ${{ inputs.biome }}
@@ -881,6 +855,7 @@ jobs:
           BIOME_ENABLED: ${{ inputs.biome }}
           OXLINT_ENABLED: ${{ inputs.oxlint }}
           AST_GREP_ENABLED: ${{ inputs.ast-grep }}
+          REGAL_ENABLED: ${{ inputs.regal }}
           HTMLHINT_ENABLED: ${{ inputs.htmlhint }}
           STYLELINT_ENABLED: ${{ inputs.stylelint }}
           YAMLLINT_ENABLED: ${{ inputs.yamllint }}
