@@ -558,6 +558,13 @@ jobs:
           oxlint_bin="$oxlint_install_dir/node_modules/.bin/oxlint"
           files_list="$RUNNER_TEMP/oxlint-files"
           sri_sha512() { printf 'sha512-%s' "$(openssl dgst -sha512 -binary "$1" | openssl base64 -A)"; }
+          tarball_size() {
+            if [ ! -r "$1" ]; then
+              printf '0'
+              return
+            fi
+            wc -c < "$1" | tr -d '[:space:]'
+          }
           if ! find -P . -type f \( -name '*.js' -o -name '*.jsx' -o -name '*.mjs' -o -name '*.cjs' -o -name '*.ts' -o -name '*.tsx' \) \
             -not -path '*/.git/*' -not -path '*/node_modules/*' \
             -not -path '*/dist/*' -not -path '*/build/*' \
@@ -580,6 +587,10 @@ jobs:
                 oxlint_can_scan=false
               elif [ ! -s "$oxlint_package" ] || [ ! -s "$oxlint_binding_package" ]; then
                 echo "::warning::oxlint package tarball missing after download - manifest will record missing output."
+                oxlint_can_scan=false
+              elif [ "$(tarball_size "$oxlint_package")" -le 1024 ] \
+                || [ "$(tarball_size "$oxlint_binding_package")" -le 1024 ]; then
+                echo "::warning::oxlint package tarball at or below 1024 bytes after download - manifest will record missing output."
                 oxlint_can_scan=false
               elif [ "$(sri_sha512 "$oxlint_package")" != "$OXLINT_NPM_INTEGRITY" ]; then
                 echo "::warning::oxlint package integrity mismatch - manifest will record missing output."
