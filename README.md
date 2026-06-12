@@ -30,7 +30,7 @@ Current staged catalog:
 | Trivy | off | Native SARIF with Sigilix metadata. Opt-in filesystem vulnerability, secret, misconfiguration, and license scanning. |
 | TruffleHog | off | Converts TruffleHog JSON output to SARIF. Secret verification is disabled in CI to avoid provider calls with discovered credentials. |
 | zizmor | on | Native SARIF with Sigilix metadata for GitHub Actions security scanning. |
-| Hadolint | off | Native SARIF with Sigilix metadata. Opt-in Dockerfile linting. |
+| Hadolint | on | Native SARIF with Sigilix metadata for Dockerfile linting. |
 | TFLint | off | Native SARIF with Sigilix metadata. Opt-in Terraform linting. |
 | Biome | off | Native SARIF with Sigilix metadata. Opt-in web source linting and format diagnostics. |
 | Oxlint | off | Native SARIF with Sigilix metadata. Opt-in JavaScript and TypeScript linting. |
@@ -72,10 +72,10 @@ a moving ref cannot prove which version of the runner ran.
 ### Inputs
 
 Default-on tool booleans: `semgrep`, `eslint`, `ruff`, `actionlint`, `shellcheck`, `yamllint`,
-`gitleaks`, `osv-scanner`, and `zizmor`.
+`gitleaks`, `osv-scanner`, `zizmor`, and `hadolint`.
 
-Default-off opt-in tool booleans: `checkov`, `trivy`, `trufflehog`, `hadolint`, `tflint`,
-`biome`, and `oxlint`.
+Default-off opt-in tool booleans: `checkov`, `trivy`, `trufflehog`, `tflint`, `biome`, and
+`oxlint`.
 
 Other useful inputs:
 

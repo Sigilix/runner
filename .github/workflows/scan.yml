@@ -95,7 +95,7 @@ on:
       hadolint:
         description: "Run Hadolint on Dockerfiles and merge its SARIF."
         required: false
-        default: false
+        default: true
         type: boolean
       tflint:
         description: "Run TFLint on Terraform files and merge its SARIF."
