@@ -25,6 +25,12 @@ class OxlintWorkflowRuntimeTest(unittest.TestCase):
         self.assertIsNotNone(match)
         return textwrap.dedent(match.group(0))
 
+    def workflow_oxlint_find_command(self):
+        text = self.workflow_text()
+        match = re.search(r'(?ms)^[ \t]+if ! (?P<command>find -P .+? > "\$files_list"); then', text)
+        self.assertIsNotNone(match)
+        return match.group("command")
+
     def bash_env(self, **values):
         return {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), **values}
 
@@ -69,21 +75,23 @@ fi""",
                 with open(full_path, "w", encoding="utf-8"):
                     pass
 
-            output = subprocess.check_output(
+            files_list = os.path.join(tmpdir, "oxlint-files")
+            find_command = self.workflow_oxlint_find_command()
+            self.assertIn("-print0", find_command)
+            self.assertIn('> "$files_list"', find_command)
+            subprocess.check_call(
                 [
                     "bash",
                     "-c",
-                    r"""find -P . -type f \( -name '*.js' -o -name '*.jsx' -o -name '*.mjs' -o -name '*.cjs' -o -name '*.ts' -o -name '*.tsx' \) \
-  -not -path '*/.git/*' -not -path '*/node_modules/*' \
-  -not -path '*/dist/*' -not -path '*/build/*' \
-  -not -path '*/coverage/*' -not -path '*/.next/*' \
-  -not -path '*/out/*' -print | sort""",
+                    'files_list="$OXLINT_FILES_LIST"\n' + find_command,
                 ],
                 cwd=tmpdir,
-                text=True,
+                env=self.bash_env(**{"OXLINT_FILES_LIST": files_list}),
             )
+            with open(files_list, "rb") as handle:
+                selected = [entry.decode() for entry in handle.read().split(b"\0") if entry]
 
-        self.assertEqual(output.splitlines(), ["./src/app.ts"])
+        self.assertEqual(selected, ["./src/app.ts"])
 
     def test_tarball_size_guard_runs_before_integrity_checks(self):
         text = self.workflow_text()

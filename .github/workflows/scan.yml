@@ -565,11 +565,11 @@ jobs:
             fi
             wc -c < "$1" | tr -d '[:space:]'
           }
-          if ! find -P . -type f \( -name '*.js' -o -name '*.jsx' -o -name '*.mjs' -o -name '*.cjs' -o -name '*.ts' -o -name '*.tsx' \) \
-            -not -path '*/.git/*' -not -path '*/node_modules/*' \
-            -not -path '*/dist/*' -not -path '*/build/*' \
-            -not -path '*/coverage/*' -not -path '*/.next/*' \
-            -not -path '*/out/*' -print0 > "$files_list"; then
+          if ! find -P . \
+            \( -type d \( -name '.git' -o -name 'node_modules' -o -name 'dist' -o -name 'build' \
+            -o -name 'coverage' -o -name '.next' -o -name 'out' \) -prune \) -o \
+            \( -type f \( -name '*.js' -o -name '*.jsx' -o -name '*.mjs' -o -name '*.cjs' \
+            -o -name '*.ts' -o -name '*.tsx' \) -print0 \) > "$files_list"; then
             echo "::warning::oxlint file discovery failed - manifest will record missing output."
           else
             mapfile -d '' files < "$files_list"

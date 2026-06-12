@@ -661,10 +661,10 @@ class SigilixWorkflowContractTest(unittest.TestCase):
         text = self.workflow_text()
 
         self.assertIn('files_list="$RUNNER_TEMP/oxlint-files"', text)
-        self.assertIn("find -P . -type f", text)
-        self.assertIn("-not -path '*/dist/*' -not -path '*/build/*'", text)
-        self.assertIn("-not -path '*/coverage/*' -not -path '*/.next/*'", text)
-        self.assertIn("-not -path '*/out/*'", text)
+        self.assertIn("find -P . \\", text)
+        self.assertIn("\\( -type d \\( -name '.git' -o -name 'node_modules'", text)
+        self.assertIn("-name 'dist' -o -name 'build'", text)
+        self.assertIn("-name '.next' -o -name 'out' \\) -prune \\) -o", text)
         self.assertIn('printf \'{"version":"2.1.0","runs":[]}\' > "$raw"', text)
 
     def test_oxlint_separates_options_from_file_paths(self):
@@ -707,8 +707,8 @@ class SigilixWorkflowContractTest(unittest.TestCase):
         self.assertIn("oxlint version mismatch or unavailable", text)
         self.assertIn("OXLINT_NPM_INTEGRITY:", text)
         self.assertIn("OXLINT_LINUX_X64_GNU_INTEGRITY:", text)
-        self.assertIn('sri_sha512() { printf', text)
-        self.assertIn('"@oxlint/binding-linux-x64-gnu@${OXLINT_VERSION}"', text)
+        self.assertIn('[ "$(sri_sha512 "$oxlint_package")" != "$OXLINT_NPM_INTEGRITY" ]', text)
+        self.assertIn('[ "$(sri_sha512 "$oxlint_binding_package")" != "$OXLINT_LINUX_X64_GNU_INTEGRITY" ]', text)
         self.assertIn('[ ! -f "$oxlint_config" ]', text)
         self.assertIn('if [ "$oxlint_can_scan" = true ]; then', text)
         self.assertIn('if [ ! -s "$raw" ]; then', text)
