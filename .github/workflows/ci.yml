@@ -17,6 +17,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 .github/scripts/sigilix_sarif_test.py
+          python3 .github/scripts/oxlint_workflow_test.py
           python3 -m py_compile .github/scripts/*.py
 
   lint:

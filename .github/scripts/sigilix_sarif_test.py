@@ -661,6 +661,10 @@ class SigilixWorkflowContractTest(unittest.TestCase):
         text = self.workflow_text()
 
         self.assertIn('files_list="$RUNNER_TEMP/oxlint-files"', text)
+        self.assertIn("find -P . \\", text)
+        self.assertIn("\\( -type d \\( -name '.git' -o -name 'node_modules'", text)
+        self.assertIn("-name 'dist' -o -name 'build'", text)
+        self.assertIn("-name '.next' -o -name 'out' \\) -prune \\) -o", text)
         self.assertIn('printf \'{"version":"2.1.0","runs":[]}\' > "$raw"', text)
 
     def test_oxlint_separates_options_from_file_paths(self):
@@ -675,7 +679,7 @@ class SigilixWorkflowContractTest(unittest.TestCase):
         self.assertIn("oxlint_config=\"$RUNNER_DIR/.github/config/oxlint-sigilix.oxlintrc.jsonc\"", text)
         self.assertRegex(
             text,
-            r'"\$\{oxlint_cmd\[@\]\}" \\\n\s+--config "\$oxlint_config" \\\n\s+--disable-nested-config \\\n\s+--no-ignore \\\n\s+-A all -D correctness',
+            r'"\$oxlint_bin" \\\n\s+--config "\$oxlint_config" \\\n\s+--disable-nested-config \\\n\s+--no-ignore \\\n\s+-A all -D correctness',
         )
         self.assertIn("Rule selection is controlled entirely by CLI flags", config_text)
 
@@ -690,13 +694,21 @@ class SigilixWorkflowContractTest(unittest.TestCase):
     def test_oxlint_asserts_pinned_runtime_version_before_scan(self):
         text = self.workflow_text()
 
-        self.assertIn("oxlint_cmd=(npx --yes \"oxlint@${OXLINT_VERSION}\")", text)
+        self.assertIn('npm pack --silent --pack-destination "$oxlint_pack_dir"', text)
+        self.assertIn('npm install --silent --prefix "$oxlint_install_dir" --ignore-scripts --omit=optional', text)
+        self.assertIn("--registry=https://registry.npmjs.org", text)
+        self.assertIn("--no-audit --no-fund", text)
+        self.assertIn('oxlint_bin="$oxlint_install_dir/node_modules/.bin/oxlint"', text)
         self.assertIn("oxlint_version=\"$(", text)
-        self.assertIn('if ! oxlint_version="$("${oxlint_cmd[@]}" --version 2>/dev/null)"; then', text)
+        self.assertIn('if ! oxlint_version="$("$oxlint_bin" --version 2>/dev/null)"; then', text)
         self.assertIn('oxlint_can_scan=false', text)
         self.assertIn("oxlint_detected_version=\"$(printf '%s\\n' \"$oxlint_version\"", text)
         self.assertIn('[ "$oxlint_detected_version" != "$OXLINT_VERSION" ]', text)
         self.assertIn("oxlint version mismatch or unavailable", text)
+        self.assertIn("OXLINT_NPM_INTEGRITY:", text)
+        self.assertIn("OXLINT_LINUX_X64_GNU_INTEGRITY:", text)
+        self.assertIn('[ "$(sri_sha512 "$oxlint_package")" != "$OXLINT_NPM_INTEGRITY" ]', text)
+        self.assertIn('[ "$(sri_sha512 "$oxlint_binding_package")" != "$OXLINT_LINUX_X64_GNU_INTEGRITY" ]', text)
         self.assertIn('[ ! -f "$oxlint_config" ]', text)
         self.assertIn('if [ "$oxlint_can_scan" = true ]; then', text)
         self.assertIn('if [ ! -s "$raw" ]; then', text)
