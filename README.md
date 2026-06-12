@@ -28,6 +28,16 @@ Current staged catalog:
 | Flake8 | on | Converts Flake8 text output to SARIF when a `.flake8` marker is present. The config content is ignored; Sigilix runs high-confidence PyFlakes/parse checks only to avoid duplicating broad Ruff/Pylint style feedback. |
 | Knip | on | Converts Knip JSON output to SARIF. Uses a Sigilix-owned JavaScript/TypeScript profile for unresolved imports, unlisted dependencies, and missing package-script binaries; broad unused-export/file reports are not enabled. |
 | golangci-lint | on | Native SARIF with Sigilix metadata for Go repositories. Uses a runner-controlled standard linter profile and skips caller golangci config/plugins. |
+| Buf | on | Converts Buf JSON-lines lint output to SARIF for Protobuf files. Uses a pinned Linux x86_64 Buf binary, verifies its SHA256 before execution, and runs with a runner-owned v2 MINIMAL config. Updating Buf requires changing both `BUF_VERSION` and `BUF_LINUX_X86_64_SHA256`. |
+| SQLFluff | on | Converts SQLFluff JSON output to SARIF for SQL files using a runner-owned raw-templater config; CodeRabbit's documented low-signal ignored codes are excluded. |
+| Prisma Lint | on | Converts Prisma Lint JSON output to SARIF for `.prisma` files when a non-JS Prisma Lint config is present. The pinned npm package integrity is verified before install. |
+| RuboCop | on | Converts RuboCop JSON output to SARIF for Ruby files using a runner-owned config so caller plugin/gem loading is not executed. |
+| PHPStan | on | Converts PHPStan JSON output to SARIF for PHP projects using a runner-owned config with no bootstrap/include directives. |
+| PHPMD | on | Converts PHPMD JSON output to SARIF for PHP files using the low-noise `unusedcode` ruleset. |
+| PHPCS | on | Converts PHPCS JSON output to SARIF when `phpcs.xml` or `phpcs.xml.dist` is present, using a runner-owned PSR-12 standard to avoid custom sniff execution. |
+| Clippy | on | Converts Cargo/Clippy JSON compiler messages to SARIF for Rust projects with `Cargo.toml`, without enabling default Cargo features. |
+| detekt | on | Native SARIF with Sigilix metadata for Kotlin files using a pinned detekt CLI jar and runner-owned config. |
+| SwiftLint | on | Converts SwiftLint JSON output to SARIF for Swift files, with CodeRabbit's documented low-signal style rules disabled. |
 | actionlint | on | Converts actionlint JSON to SARIF for GitHub Actions workflows. |
 | ShellCheck | on | Converts ShellCheck `json1` output to SARIF. |
 | YAMLlint | on | Converts YAMLlint parsable output to SARIF with relaxed defaults for config feedback. |
@@ -62,6 +72,10 @@ Current staged catalog:
 > `regal` now defaults to `true`. Set `regal: false` (boolean) in the caller workflow to suppress it.
 > `opengrep` and `brakeman` now default to `true`. Set the matching boolean input to `false`
 > to suppress one of them; `opengrep-config` accepts comma-separated OpenGrep rulesets.
+> `buf` now defaults to `true`. Set `buf: false` (boolean) in the caller workflow to suppress it.
+> `sqlfluff`, `prisma-lint`, `rubocop`, `phpstan`, `phpmd`, `phpcs`, `clippy`, `detekt`,
+> and `swiftlint` now default to `true`. Set the matching boolean input to `false` to suppress
+> one of them.
 
 These SIG-107 slices move the runner toward broader third-party tool parity. The Sigilix
 metadata contract is currently attached to every listed tool.
@@ -102,7 +116,8 @@ a moving ref cannot prove which version of the runner ran.
 Default-on tool booleans: `semgrep`, `eslint`, `ruff`, `actionlint`, `shellcheck`, `yamllint`,
 `markdownlint`, `dotenv-linter`, `checkmake`, `gitleaks`, `osv-scanner`, `zizmor`, `hadolint`,
 `biome`, `oxlint`, `ast-grep`, `pylint`, `flake8`, `knip`, `golangci-lint`, `htmlhint`,
-`stylelint`, `tflint`, `regal`, `opengrep`, `brakeman`, and `tsc`.
+`stylelint`, `tflint`, `regal`, `opengrep`, `brakeman`, `buf`, `sqlfluff`, `prisma-lint`,
+`rubocop`, `phpstan`, `phpmd`, `phpcs`, `clippy`, `detekt`, `swiftlint`, and `tsc`.
 
 Default-off opt-in tool booleans: `checkov`, `trivy`, and `trufflehog`.
 
@@ -126,9 +141,10 @@ Other useful inputs:
   bound to your `repository`, commit `sha`, and the called workflow ref. Sigilix verifies it
   (RS256 against GitHub's JWKS) plus a provenance gate before trusting any finding, and enforces
   single-use so a receipt can't be replayed.
-- **Best-effort caller CI.** Tool findings and tool download failures do not fail the caller's CI;
-  they degrade to SARIF metadata, empty SARIF runs, or warnings. Malformed workflow/script changes
-  in this runner still fail this repo's own CI.
+- **Best-effort caller CI.** Tool findings and most tool availability failures do not fail the
+  caller's CI; they degrade to SARIF metadata, empty SARIF runs, or warnings. Integrity or contract
+  failures for a verified binary can fail the scan job so Sigilix does not trust unverified tool
+  output. Malformed workflow/script changes in this runner still fail this repo's own CI.
 - **Coverage manifest.** Every run uploads and posts `scan-manifest.json` next to SARIF, recording
   each configured tool as `produced`, `empty`, `missing-output`, `invalid-output`, or `disabled`.
   Sigilix stores it with the OIDC receipt so green CI never has to mean "all tools ran."

@@ -7,6 +7,7 @@ import unittest
 
 
 WORKFLOW_PATH = os.path.join(os.path.dirname(__file__), "..", "workflows", "scan.yml")
+SCRIPT_PATH = os.path.join(os.path.dirname(__file__), "run_oxlint.sh")
 
 
 class OxlintWorkflowRuntimeTest(unittest.TestCase):
@@ -14,8 +15,12 @@ class OxlintWorkflowRuntimeTest(unittest.TestCase):
         with open(WORKFLOW_PATH, encoding="utf-8") as workflow:
             return workflow.read()
 
+    def script_text(self):
+        with open(SCRIPT_PATH, encoding="utf-8") as script:
+            return script.read()
+
     def workflow_tarball_size_helper(self):
-        text = self.workflow_text()
+        text = self.script_text()
         match = re.search(
             r"(?m)^(?P<indent>[ \t]*)tarball_size\(\) \{\n"
             r"(?:(?P=indent)[ \t]+.*\n)*"
@@ -26,8 +31,8 @@ class OxlintWorkflowRuntimeTest(unittest.TestCase):
         return textwrap.dedent(match.group(0))
 
     def workflow_oxlint_find_command(self):
-        text = self.workflow_text()
-        match = re.search(r'(?ms)^[ \t]+if ! (?P<command>find -P .+? > "\$files_list"); then', text)
+        text = self.script_text()
+        match = re.search(r'(?ms)^[ \t]*if ! (?P<command>find -P .+? > "\$files_list"); then', text)
         self.assertIsNotNone(match)
         return match.group("command")
 
@@ -94,7 +99,7 @@ exit 1""",
         self.assertEqual(selected, ["./src/app.ts"])
 
     def test_tarball_size_guard_runs_before_integrity_checks(self):
-        text = self.workflow_text()
+        text = self.script_text()
 
         missing_guard = '[ ! -s "$oxlint_package" ]'
         size_guard = 'tarball_size "$oxlint_package"'

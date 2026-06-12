@@ -487,7 +487,20 @@ LANGUAGE_SARIF_TOOL_OUTPUTS = {
     "oxlint": "oxlint.sarif",
     "ast-grep": "ast-grep.sarif",
     "golangci-lint": "golangci-lint.sarif",
+    "buf": "buf.sarif",
     "htmlhint": "htmlhint.sarif",
+}
+
+HIGH_IMPACT_LANGUAGE_TOOL_OUTPUTS = {
+    "sqlfluff": "sqlfluff.sarif",
+    "prisma-lint": "prisma-lint.sarif",
+    "rubocop": "rubocop.sarif",
+    "phpstan": "phpstan.sarif",
+    "phpmd": "phpmd.sarif",
+    "phpcs": "phpcs.sarif",
+    "clippy": "clippy.sarif",
+    "detekt": "detekt.sarif",
+    "swiftlint": "swiftlint.sarif",
 }
 
 POLICY_TOOL_OUTPUTS = {
@@ -531,6 +544,7 @@ ALL_TOOL_OUTPUTS = {
     **POLICY_TOOL_OUTPUTS,
     **SAST_TOOL_OUTPUTS,
     **LANGUAGE_CONVERTER_TOOL_OUTPUTS,
+    **HIGH_IMPACT_LANGUAGE_TOOL_OUTPUTS,
     **CONFIG_TOOL_OUTPUTS,
     **CI_SECURITY_TOOL_OUTPUTS,
     **CONTAINER_TOOL_OUTPUTS,
@@ -563,6 +577,11 @@ class SigilixWorkflowContractTest(unittest.TestCase):
         path = os.path.join(os.path.dirname(__file__), "..", "config", name)
         if not os.path.exists(path):
             return ""
+        with open(path, "r", encoding="utf-8") as handle:
+            return handle.read()
+
+    def script_text(self, name):
+        path = os.path.join(os.path.dirname(__file__), name)
         with open(path, "r", encoding="utf-8") as handle:
             return handle.read()
 
@@ -683,6 +702,7 @@ class SigilixWorkflowContractTest(unittest.TestCase):
             **POLICY_TOOL_OUTPUTS,
             **SAST_TOOL_OUTPUTS,
             **LANGUAGE_CONVERTER_TOOL_OUTPUTS,
+            **HIGH_IMPACT_LANGUAGE_TOOL_OUTPUTS,
             **CONFIG_TOOL_OUTPUTS,
             **CI_SECURITY_TOOL_OUTPUTS,
             **CONTAINER_TOOL_OUTPUTS,
@@ -694,22 +714,23 @@ class SigilixWorkflowContractTest(unittest.TestCase):
             self.assertEqual(rows[tool_id]["output"], output_name)
 
     def test_oxlint_is_default_on_and_empty_tree_emits_empty_sarif(self):
-        text = self.workflow_text()
+        workflow = self.workflow_text()
+        text = self.script_text("run_oxlint.sh")
 
-        self.assertRegex(text, r"\n      oxlint:\n(?:        [^\n]+\n)+?        default: true\n")
+        self.assertRegex(workflow, r"\n      oxlint:\n(?:        [^\n]+\n)+?        default: true\n")
         self.assertIn('files_list="$RUNNER_TEMP/oxlint-files"', text)
-        self.assertIn("find -P . \\\n            \\( -type d \\( -name '.git' -o -name 'node_modules'", text)
+        self.assertIn("find -P . \\\n  \\( -type d \\( -name '.git' -o -name 'node_modules'", text)
         self.assertIn("-name 'dist' -o -name 'build'", text)
         self.assertIn("-name '.next' -o -name 'out' \\) -prune \\) -o", text)
         self.assertIn('printf \'{"version":"2.1.0","runs":[]}\' > "$raw"', text)
 
     def test_oxlint_separates_options_from_file_paths(self):
-        text = self.workflow_text()
+        text = self.script_text("run_oxlint.sh")
 
         self.assertRegex(text, r"\n\s+-- \\\n\s+\"\$\{files\[@\]\}\" > \"\$raw\"")
 
     def test_oxlint_uses_sigilix_controlled_correctness_mode(self):
-        text = self.workflow_text()
+        text = self.script_text("run_oxlint.sh")
         config_text = self.config_text("oxlint-sigilix.oxlintrc.jsonc")
 
         self.assertIn("oxlint_config=\"$RUNNER_DIR/.github/config/oxlint-sigilix.oxlintrc.jsonc\"", text)
@@ -728,7 +749,8 @@ class SigilixWorkflowContractTest(unittest.TestCase):
         self.assertIn("check-latest: false", text)
 
     def test_oxlint_asserts_pinned_runtime_version_before_scan(self):
-        text = self.workflow_text()
+        workflow = self.workflow_text()
+        text = self.script_text("run_oxlint.sh")
 
         self.assertIn('npm pack --silent --pack-destination "$oxlint_pack_dir"', text)
         self.assertIn('npm install --silent --prefix "$oxlint_install_dir" --ignore-scripts --omit=optional', text)
@@ -741,8 +763,8 @@ class SigilixWorkflowContractTest(unittest.TestCase):
         self.assertIn("oxlint_detected_version=\"$(printf '%s\\n' \"$oxlint_version\"", text)
         self.assertIn('[ "$oxlint_detected_version" != "$OXLINT_VERSION" ]', text)
         self.assertIn("oxlint version mismatch or unavailable", text)
-        self.assertIn("OXLINT_NPM_INTEGRITY:", text)
-        self.assertIn("OXLINT_LINUX_X64_GNU_INTEGRITY:", text)
+        self.assertIn("OXLINT_NPM_INTEGRITY:", workflow)
+        self.assertIn("OXLINT_LINUX_X64_GNU_INTEGRITY:", workflow)
         self.assertIn('[ "$(sri_sha512 "$oxlint_package")" != "$OXLINT_NPM_INTEGRITY" ]', text)
         self.assertIn('[ "$(sri_sha512 "$oxlint_binding_package")" != "$OXLINT_LINUX_X64_GNU_INTEGRITY" ]', text)
         self.assertIn('[ ! -f "$oxlint_config" ]', text)
@@ -761,6 +783,7 @@ class SigilixWorkflowContractTest(unittest.TestCase):
             "TFLINT_VERSION",
             "BIOME_VERSION",
             "OXLINT_VERSION",
+            "BUF_VERSION",
             "OPENGREP_VERSION",
             "BRAKEMAN_VERSION",
         ):

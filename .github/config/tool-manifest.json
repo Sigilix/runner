@@ -51,6 +51,56 @@
       "output": "golangci-lint.sarif"
     },
     {
+      "id": "buf",
+      "env": "BUF_ENABLED",
+      "output": "buf.sarif"
+    },
+    {
+      "id": "sqlfluff",
+      "env": "SQLFLUFF_ENABLED",
+      "output": "sqlfluff.sarif"
+    },
+    {
+      "id": "prisma-lint",
+      "env": "PRISMA_LINT_ENABLED",
+      "output": "prisma-lint.sarif"
+    },
+    {
+      "id": "rubocop",
+      "env": "RUBOCOP_ENABLED",
+      "output": "rubocop.sarif"
+    },
+    {
+      "id": "phpstan",
+      "env": "PHPSTAN_ENABLED",
+      "output": "phpstan.sarif"
+    },
+    {
+      "id": "phpmd",
+      "env": "PHPMD_ENABLED",
+      "output": "phpmd.sarif"
+    },
+    {
+      "id": "phpcs",
+      "env": "PHPCS_ENABLED",
+      "output": "phpcs.sarif"
+    },
+    {
+      "id": "clippy",
+      "env": "CLIPPY_ENABLED",
+      "output": "clippy.sarif"
+    },
+    {
+      "id": "detekt",
+      "env": "DETEKT_ENABLED",
+      "output": "detekt.sarif"
+    },
+    {
+      "id": "swiftlint",
+      "env": "SWIFTLINT_ENABLED",
+      "output": "swiftlint.sarif"
+    },
+    {
       "id": "actionlint",
       "env": "ACTIONLINT_ENABLED",
       "output": "actionlint.sarif"
