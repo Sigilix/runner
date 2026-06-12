@@ -90,7 +90,7 @@ on:
       zizmor:
         description: "Run zizmor on GitHub Actions workflows and merge its SARIF."
         required: false
-        default: false
+        default: true
         type: boolean
       hadolint:
         description: "Run Hadolint on Dockerfiles and merge its SARIF."
