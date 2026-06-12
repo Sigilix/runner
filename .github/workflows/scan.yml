@@ -531,11 +531,19 @@ jobs:
           cd "$SOURCE_DIR"
           raw="$SARIF_DIR/biome.raw.sarif"
           out="$SARIF_DIR/biome.sarif"
-          if ! npx --yes "@biomejs/biome@${BIOME_VERSION}" ci . \
-            --files-ignore-unknown=true \
-            --reporter=sarif \
-            --reporter-file="$raw"; then
-            echo "::warning::biome scan failed - manifest will record missing output if no SARIF was produced."
+          biome_config="$RUNNER_DIR/.github/config/biome-sigilix.jsonc"
+          if [ ! -f "$biome_config" ]; then
+            echo "::warning::biome Sigilix config missing at $biome_config - manifest will record missing output."
+          elif ! npx --yes "@biomejs/biome@${BIOME_VERSION}" lint . \
+              --config-path "$biome_config" \
+              --vcs-use-ignore-file=false \
+              --files-ignore-unknown=true \
+              --no-errors-on-unmatched \
+              --reporter=sarif \
+              --reporter-file="$raw"; then
+            if [ ! -s "$raw" ]; then
+              echo "::warning::biome scan failed and produced no SARIF output - manifest will record missing output."
+            fi
           fi
           if [ -s "$raw" ]; then
             python3 "$RUNNER_DIR/.github/scripts/sigilix_sarif_contract.py" \

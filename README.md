@@ -32,10 +32,11 @@ Current staged catalog:
 | zizmor | on | Native SARIF with Sigilix metadata for GitHub Actions security scanning. |
 | Hadolint | on | Native SARIF with Sigilix metadata for Dockerfile linting. |
 | TFLint | off | Native SARIF with Sigilix metadata. Opt-in Terraform linting. |
-| Biome | off | Native SARIF with Sigilix metadata. Opt-in web source linting and format diagnostics. |
+| Biome | off | Native SARIF with Sigilix metadata. Opt-in Sigilix-controlled correctness linting for JS/TS and JSON; uses runner-owned config, bypasses caller ignore files, and skips common generated-output directories. |
 | Oxlint | on | Native SARIF with Sigilix metadata. Default-on Sigilix-controlled correctness linting for JavaScript and TypeScript; uses runner-owned config, disables caller Oxlint config and ignore files, skips common generated-output directories, and checks pinned npm package integrity before scanning. |
 
 > **SIG-107:** `oxlint` now defaults to `true`. Set `oxlint: false` (boolean) in the caller workflow to suppress it.
+> `biome` remains opt-in while the hardened runner-owned correctness mode soaks.
 
 These SIG-107 slices move the runner toward broader third-party tool parity. The Sigilix
 metadata contract is currently attached to every listed tool.
