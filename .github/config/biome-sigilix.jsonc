@@ -1,0 +1,16 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.4.16/schema.json",
+  "formatter": { "enabled": false },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": false,
+      "correctness": {
+        "noInvalidConstructorSuper": "error",
+        "noUndeclaredVariables": "error",
+        "noUnreachable": "error",
+        "noUnusedVariables": "warn"
+      }
+    }
+  }
+}
