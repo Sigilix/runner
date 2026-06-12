@@ -83,6 +83,8 @@ class SigilixSarifContractTest(unittest.TestCase):
             ("oxlint", "Oxlint"),
             ("ast-grep", "ast-grep"),
             ("regal", "Regal"),
+            ("opengrep", "OpenGrep"),
+            ("brakeman", "Brakeman"),
         ):
             run = attach_sigilix_metadata({}, tool_id)
             driver = run["tool"]["driver"]
@@ -492,6 +494,11 @@ POLICY_TOOL_OUTPUTS = {
     "regal": "regal.sarif",
 }
 
+SAST_TOOL_OUTPUTS = {
+    "opengrep": "opengrep.sarif",
+    "brakeman": "brakeman.sarif",
+}
+
 LANGUAGE_CONVERTER_TOOL_OUTPUTS = {
     "flake8": "flake8.sarif",
     "stylelint": "stylelint.sarif",
@@ -522,6 +529,7 @@ ALL_TOOL_OUTPUTS = {
     **TERRAFORM_TOOL_OUTPUTS,
     **LANGUAGE_SARIF_TOOL_OUTPUTS,
     **POLICY_TOOL_OUTPUTS,
+    **SAST_TOOL_OUTPUTS,
     **LANGUAGE_CONVERTER_TOOL_OUTPUTS,
     **CONFIG_TOOL_OUTPUTS,
     **CI_SECURITY_TOOL_OUTPUTS,
@@ -611,6 +619,8 @@ class SigilixWorkflowContractTest(unittest.TestCase):
         self.assertFalse(legacy_tools & set(OPT_IN_SECURITY_TOOL_OUTPUTS))
         self.assertFalse(legacy_tools & set(LANGUAGE_SARIF_TOOL_OUTPUTS))
         self.assertFalse(set(OPT_IN_SECURITY_TOOL_OUTPUTS) & set(LANGUAGE_SARIF_TOOL_OUTPUTS))
+        self.assertFalse(legacy_tools & set(SAST_TOOL_OUTPUTS))
+        self.assertFalse(set(SAST_TOOL_OUTPUTS) & set(LANGUAGE_SARIF_TOOL_OUTPUTS))
         self.assertNotIn("zizmor", OPT_IN_SECURITY_TOOL_OUTPUTS)
         self.assertIn("zizmor", CI_SECURITY_TOOL_OUTPUTS)
         self.assertNotIn("hadolint", OPT_IN_SECURITY_TOOL_OUTPUTS)
@@ -671,6 +681,7 @@ class SigilixWorkflowContractTest(unittest.TestCase):
             **TERRAFORM_TOOL_OUTPUTS,
             **LANGUAGE_SARIF_TOOL_OUTPUTS,
             **POLICY_TOOL_OUTPUTS,
+            **SAST_TOOL_OUTPUTS,
             **LANGUAGE_CONVERTER_TOOL_OUTPUTS,
             **CONFIG_TOOL_OUTPUTS,
             **CI_SECURITY_TOOL_OUTPUTS,
@@ -750,6 +761,8 @@ class SigilixWorkflowContractTest(unittest.TestCase):
             "TFLINT_VERSION",
             "BIOME_VERSION",
             "OXLINT_VERSION",
+            "OPENGREP_VERSION",
+            "BRAKEMAN_VERSION",
         ):
             match = re.search(rf"\n      {env_var}: \"([^\"]+)\"\n", text)
             self.assertIsNotNone(match)

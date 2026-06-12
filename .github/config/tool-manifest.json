@@ -6,6 +6,11 @@
       "output": "semgrep.sarif"
     },
     {
+      "id": "opengrep",
+      "env": "OPENGREP_ENABLED",
+      "output": "opengrep.sarif"
+    },
+    {
       "id": "eslint",
       "env": "ESLINT_ENABLED",
       "output": "eslint.sarif"
@@ -19,6 +24,11 @@
       "id": "ruff",
       "env": "RUFF_ENABLED",
       "output": "ruff.sarif"
+    },
+    {
+      "id": "brakeman",
+      "env": "BRAKEMAN_ENABLED",
+      "output": "brakeman.sarif"
     },
     {
       "id": "pylint",
