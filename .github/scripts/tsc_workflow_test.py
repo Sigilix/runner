@@ -79,6 +79,7 @@ class TypeScriptCompilerWorkflowTest(unittest.TestCase):
         self.assertIn("npm pack --silent --pack-destination", text)
         self.assertIn("verify_package_integrity", text)
         self.assertIn("npm install --silent --prefix \"$tsc_install_dir\" --ignore-scripts --omit=optional", text)
+        self.assertIn("'^(Version|v)[[:space:]]*[0-9]+[.][0-9]+[.][0-9]+'", text)
         self.assertIn("--noEmit", text)
         self.assertIn("--pretty false", text)
         self.assertIn("--skipLibCheck", text)
@@ -96,6 +97,7 @@ class TypeScriptCompilerWorkflowTest(unittest.TestCase):
                 [
                     "src/index.ts(3,7): error TS2322: Type 'string' is not assignable to type 'number'.",
                     "src/index.ts(1,21): error TS2307: Cannot find module 'missing' or its corresponding type declarations.",
+                    "src/index.ts(5,21): error TS2307: Cannot find module '@types/react-dom' or its corresponding type declarations.",
                     "src/index.ts(4,21): error TS2307: Cannot find module './internal' or its corresponding type declarations.",
                     "src/index.ts(2,22): error TS7016: Could not find a declaration file for module 'legacy'.",
                 ]
