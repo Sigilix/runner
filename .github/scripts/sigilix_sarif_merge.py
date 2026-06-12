@@ -2,6 +2,8 @@ import argparse
 import json
 import sys
 
+from sigilix_tool_manifest import manifest_sarif_paths
+
 
 EMPTY_SARIF = {"version": "2.1.0", "runs": []}
 
@@ -83,12 +85,29 @@ def write_merged_sarif(paths, output_path, byte_cap=None):
 
 def _main(argv):
     parser = argparse.ArgumentParser(description="Merge SARIF documents.")
-    parser.add_argument("inputs", nargs="+")
+    parser.add_argument("inputs", nargs="*")
+    parser.add_argument("--tool-manifest", help="Static tool manifest JSON with SARIF output filenames.")
+    parser.add_argument("--sarif-dir", help="Directory containing per-tool SARIF outputs.")
     parser.add_argument("-o", "--output", required=True)
     parser.add_argument("--byte-cap", type=int)
     args = parser.parse_args(argv)
 
-    _, summary = write_merged_sarif(args.inputs, args.output, byte_cap=args.byte_cap)
+    if bool(args.tool_manifest) != bool(args.sarif_dir):
+        print("--tool-manifest and --sarif-dir must be used together", file=sys.stderr)
+        return 2
+
+    inputs = list(args.inputs)
+    try:
+        if args.tool_manifest:
+            inputs.extend(manifest_sarif_paths(args.tool_manifest, args.sarif_dir))
+    except ValueError as err:
+        print(str(err), file=sys.stderr)
+        return 2
+    if not inputs:
+        print("at least one SARIF input or --tool-manifest is required", file=sys.stderr)
+        return 2
+
+    _, summary = write_merged_sarif(inputs, args.output, byte_cap=args.byte_cap)
     if summary is not None:
         print(
             "::warning::SARIF merge byte cap dropped "

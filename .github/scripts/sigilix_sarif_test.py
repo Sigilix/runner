@@ -14,12 +14,20 @@ from sigilix_sarif_contract import (
     attach_sigilix_metadata,
     cap_results,
 )
+from sigilix_sarif_merge import _main as sarif_merge_main
 from sigilix_sarif_merge import merge_sarif_documents
 from actionlint_to_sarif import convert_actionlint_json
 from eslint_to_sarif import convert_eslint_json
 from sarif_converter_common import normalize_path
 from shellcheck_to_sarif import convert_shellcheck_json
+from sigilix_scan_manifest import _main as scan_manifest_main
 from sigilix_scan_manifest import build_scan_manifest
+from sigilix_tool_manifest import (
+    load_tool_manifest,
+    manifest_sarif_paths,
+    manifest_tool_specs,
+    validate_tool_manifest,
+)
 
 
 def make_result(level, path, line, rule_id, message):
@@ -331,6 +339,15 @@ class SigilixSarifMergeTest(unittest.TestCase):
         self.assertLessEqual(len(json.dumps(merged, separators=(",", ":")).encode("utf-8")), 80)
         self.assertIsNone(summary)
 
+    def test_merge_cli_requires_manifest_and_sarif_dir_together(self):
+        stderr = io.StringIO()
+
+        with contextlib.redirect_stderr(stderr):
+            code = sarif_merge_main(["--tool-manifest", "tool-manifest.json", "-o", "sarif.json"])
+
+        self.assertEqual(code, 2)
+        self.assertIn("--tool-manifest and --sarif-dir must be used together", stderr.getvalue())
+
 
 class SigilixScanManifestTest(unittest.TestCase):
     def write_json(self, directory, name, content):
@@ -388,6 +405,15 @@ class SigilixScanManifestTest(unittest.TestCase):
     def test_manifest_rejects_more_specs_than_known_tools(self):
         with self.assertRaises(ValueError):
             build_scan_manifest([("semgrep", False, "")] * (len(KNOWN_TOOL_IDS) + 1))
+
+    def test_manifest_cli_requires_manifest_and_sarif_dir_together(self):
+        stderr = io.StringIO()
+
+        with contextlib.redirect_stderr(stderr):
+            code = scan_manifest_main(["--tool-manifest", "tool-manifest.json", "-o", "scan-manifest.json"])
+
+        self.assertEqual(code, 2)
+        self.assertIn("--tool-manifest and --sarif-dir must be used together", stderr.getvalue())
 
     def test_manifest_treats_non_object_sarif_runs_as_invalid_output(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -447,12 +473,99 @@ LANGUAGE_SARIF_TOOL_OUTPUTS = {
     "oxlint": "oxlint.sarif",
 }
 
+ALL_TOOL_OUTPUTS = {
+    "semgrep": "semgrep.sarif",
+    "eslint": "eslint.sarif",
+    "ruff": "ruff.sarif",
+    "actionlint": "actionlint.sarif",
+    "shellcheck": "shellcheck.sarif",
+    "gitleaks": "gitleaks.sarif",
+    "osv-scanner": "osv.sarif",
+    **NEXT_BATCH_TOOL_OUTPUTS,
+    **LANGUAGE_SARIF_TOOL_OUTPUTS,
+}
+
 
 class SigilixWorkflowContractTest(unittest.TestCase):
     def workflow_text(self):
         path = os.path.join(os.path.dirname(__file__), "..", "workflows", "scan.yml")
         with open(path, "r", encoding="utf-8") as handle:
             return handle.read()
+
+    def tool_manifest(self):
+        return load_tool_manifest(self.tool_manifest_path())
+
+    def tool_manifest_path(self):
+        return os.path.join(os.path.dirname(__file__), "..", "config", "tool-manifest.json")
+
+    def raw_tool_manifest(self):
+        path = os.path.join(os.path.dirname(__file__), "..", "config", "tool-manifest.json")
+        with open(path, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+
+    def test_static_tool_manifest_matches_known_outputs(self):
+        manifest = self.raw_tool_manifest()
+
+        self.assertEqual(set(manifest.keys()), {"tools"})
+        rows = self.tool_manifest()
+        self.assertEqual(len(rows), len({row["id"] for row in rows}))
+        self.assertEqual(len(rows), len({row["output"] for row in rows}))
+        self.assertEqual({row["id"]: row["output"] for row in rows}, ALL_TOOL_OUTPUTS)
+        self.assertEqual({row["id"] for row in rows}, KNOWN_TOOL_IDS)
+        for row in rows:
+            self.assertEqual(set(row.keys()), {"id", "env", "output"})
+            self.assertRegex(row["env"], r"^[A-Z0-9_]+_ENABLED$")
+
+    def test_tool_manifest_helper_validates_rows_and_builds_paths(self):
+        rows = self.tool_manifest()
+        env = {row["env"]: "false" for row in rows}
+        env["SEMGREP_ENABLED"] = "true"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            specs = manifest_tool_specs(self.tool_manifest_path(), tmpdir, env)
+            paths = manifest_sarif_paths(self.tool_manifest_path(), tmpdir)
+
+        self.assertIn(("semgrep", True, os.path.join(tmpdir, "semgrep.sarif")), specs)
+        self.assertIn(("eslint", False, ""), specs)
+        self.assertEqual(paths, [os.path.join(tmpdir, row["output"]) for row in rows])
+
+    def test_tool_manifest_rejects_invalid_rows(self):
+        with self.assertRaisesRegex(ValueError, "invalid tool id"):
+            validate_tool_manifest({"tools": [{"id": "bad;id", "env": "BAD_ENABLED", "output": "bad.sarif"}]})
+        with self.assertRaisesRegex(ValueError, "duplicate tool id"):
+            validate_tool_manifest(
+                {
+                    "tools": [
+                        {"id": "semgrep", "env": "SEMGREP_ENABLED", "output": "semgrep.sarif"},
+                        {"id": "semgrep", "env": "SEMGREP_ENABLED", "output": "semgrep-copy.sarif"},
+                    ]
+                }
+            )
+        with self.assertRaisesRegex(ValueError, "invalid output"):
+            validate_tool_manifest({"tools": [{"id": "semgrep", "env": "SEMGREP_ENABLED", "output": "../semgrep.sarif"}]})
+
+    def test_tool_manifest_rejects_missing_known_tool_ids(self):
+        rows = [row for row in self.raw_tool_manifest()["tools"] if row["id"] != "semgrep"]
+
+        with self.assertRaisesRegex(ValueError, "missing: semgrep"):
+            validate_tool_manifest({"tools": rows})
+
+    def test_tool_output_groups_are_disjoint(self):
+        legacy_tools = {"semgrep", "eslint", "ruff", "actionlint", "shellcheck", "gitleaks", "osv-scanner"}
+
+        self.assertFalse(legacy_tools & set(NEXT_BATCH_TOOL_OUTPUTS))
+        self.assertFalse(legacy_tools & set(LANGUAGE_SARIF_TOOL_OUTPUTS))
+        self.assertFalse(set(NEXT_BATCH_TOOL_OUTPUTS) & set(LANGUAGE_SARIF_TOOL_OUTPUTS))
+
+    def test_workflow_uses_static_tool_manifest_for_manifest_and_merge(self):
+        text = self.workflow_text()
+
+        self.assertIn("TOOL_MANIFEST:", text)
+        self.assertIn("tool-manifest.json", text)
+        self.assertIn('--tool-manifest "$TOOL_MANIFEST"', text)
+        self.assertIn('--sarif-dir "$SARIF_DIR"', text)
+        self.assertNotIn('python3 - "$TOOL_MANIFEST"', text)
+        self.assertNotIn("jq -r", text)
 
     def test_next_batch_tool_inputs_are_explicit_default_off(self):
         text = self.workflow_text()
@@ -464,13 +577,12 @@ class SigilixWorkflowContractTest(unittest.TestCase):
             )
 
     def test_next_batch_tool_outputs_are_manifested_and_merged(self):
-        text = self.workflow_text()
+        rows = {row["id"]: row for row in self.tool_manifest()}
 
         for tool_id, output_name in {**NEXT_BATCH_TOOL_OUTPUTS, **LANGUAGE_SARIF_TOOL_OUTPUTS}.items():
             env_var = tool_id.upper().replace("-", "_") + "_ENABLED"
-            self.assertIn(f"{env_var}: ${{{{ inputs.{tool_id} }}}}", text)
-            self.assertIn(f'add_tool {tool_id} "${env_var}" "$SARIF_DIR/{output_name}"', text)
-            self.assertIn(f'"$SARIF_DIR/{output_name}"', text)
+            self.assertEqual(rows[tool_id]["env"], env_var)
+            self.assertEqual(rows[tool_id]["output"], output_name)
 
     def test_oxlint_empty_tree_emits_empty_sarif(self):
         text = self.workflow_text()
