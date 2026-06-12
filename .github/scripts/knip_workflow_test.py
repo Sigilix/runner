@@ -66,6 +66,8 @@ class KnipWorkflowTest(unittest.TestCase):
         self.assertIn("--no-config-hints", text)
         self.assertIn("--no-tag-hints", text)
         self.assertIn("--no-gitignore", text)
+        self.assertIn('python3 -m json.tool "$json"', text)
+        self.assertIn("preserving Knip JSON for SARIF conversion", text)
         self.assertIn("knip_to_sarif.py", text)
         self.assertIn('"entry"', config)
         self.assertIn('"project"', config)
@@ -78,6 +80,7 @@ class KnipWorkflowTest(unittest.TestCase):
     def test_knip_converter_maps_dependency_resolution_issues_to_sarif(self):
         from knip_to_sarif import convert_knip_json
 
+        bad_unicode_name = chr(0xD800) + ("\U0001d4b3" * 200)
         document = convert_knip_json(
             {
                 "issues": [
@@ -91,7 +94,10 @@ class KnipWorkflowTest(unittest.TestCase):
                         "file": "/repo/package.json",
                         "unlisted": [],
                         "unresolved": [],
-                        "binaries": [{"name": "missing-bin"}, {"name": "x" * 600, "line": "3", "column": "42"}],
+                        "binaries": [
+                            {"name": "missing-bin"},
+                            {"name": bad_unicode_name, "line": "3", "column": "42"},
+                        ],
                     },
                 ]
             },
@@ -115,6 +121,13 @@ class KnipWorkflowTest(unittest.TestCase):
         self.assertEqual(results[3]["locations"][0]["physicalLocation"]["region"]["startLine"], 3)
         self.assertEqual(results[3]["locations"][0]["physicalLocation"]["region"]["startColumn"], 42)
         self.assertLessEqual(len(results[3]["message"]["text"]), 540)
+        self.assertNotIn("\ud800", results[3]["message"]["text"])
+        bounded_name = results[3]["message"]["text"].split("'")[1]
+        self.assertLessEqual(len(bounded_name.encode("utf-8")), 500)
+        try:
+            results[3]["message"]["text"].encode("utf-8")
+        except UnicodeEncodeError as error:
+            self.fail(f"message text contains invalid UTF-8: {error}")
         self.assertTrue(results[3]["message"]["text"].endswith("...'."))
 
     def test_knip_converter_normalizes_escaped_paths(self):

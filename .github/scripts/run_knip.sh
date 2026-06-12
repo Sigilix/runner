@@ -66,8 +66,12 @@ else
     --no-config-hints \
     --no-tag-hints \
     --no-gitignore > "$json"; then
-    echo "::warning::Knip scan failed - emitting empty Knip SARIF run."
-    emit_empty_json
+    if [ -s "$json" ] && python3 -m json.tool "$json" >/dev/null 2>&1; then
+      echo "::warning::Knip scan failed after writing valid JSON - preserving Knip JSON for SARIF conversion."
+    else
+      echo "::warning::Knip scan failed and produced no JSON output - emitting empty Knip SARIF run."
+      emit_empty_json
+    fi
   fi
 fi
 

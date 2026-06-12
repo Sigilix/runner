@@ -9,6 +9,7 @@ KNIP_TOOL_ID = "knip"
 KNIP_TOOL_NAME = "Knip"
 KNIP_INFORMATION_URI = "https://knip.dev/"
 MAX_ISSUE_NAME_LENGTH = 500
+TRUNCATION_SUFFIX = "..."
 
 _ISSUE_TYPES = {
     "unlisted": "unlisted dependency",
@@ -67,10 +68,29 @@ def _positive_int(value):
 
 
 def _bounded_text(value, default, limit):
-    text = str(value or default).strip()
-    if len(text) <= limit:
+    text = _safe_text(value, default)
+    encoded = text.encode("utf-8")
+    if len(encoded) <= limit:
         return text
-    return text[: limit - 3] + "..."
+    if limit <= len(TRUNCATION_SUFFIX):
+        return TRUNCATION_SUFFIX[: max(limit, 0)]
+    target = limit - len(TRUNCATION_SUFFIX)
+    output = []
+    size = 0
+    for char in text:
+        char_size = len(char.encode("utf-8"))
+        if size + char_size > target:
+            break
+        output.append(char)
+        size += char_size
+    return "".join(output) + TRUNCATION_SUFFIX
+
+
+def _safe_text(value, default):
+    text = str(value or default).strip().encode("utf-8", errors="replace").decode("utf-8")
+    if not text:
+        text = str(default).encode("utf-8", errors="replace").decode("utf-8")
+    return text or "knip"
 
 
 def _safe_path(value, base_dir):
