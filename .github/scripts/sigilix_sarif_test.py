@@ -82,6 +82,7 @@ class SigilixSarifContractTest(unittest.TestCase):
             ("biome", "Biome"),
             ("oxlint", "Oxlint"),
             ("ast-grep", "ast-grep"),
+            ("regal", "Regal"),
         ):
             run = attach_sigilix_metadata({}, tool_id)
             driver = run["tool"]["driver"]
@@ -487,6 +488,10 @@ LANGUAGE_SARIF_TOOL_OUTPUTS = {
     "htmlhint": "htmlhint.sarif",
 }
 
+POLICY_TOOL_OUTPUTS = {
+    "regal": "regal.sarif",
+}
+
 LANGUAGE_CONVERTER_TOOL_OUTPUTS = {
     "flake8": "flake8.sarif",
     "stylelint": "stylelint.sarif",
@@ -516,6 +521,7 @@ ALL_TOOL_OUTPUTS = {
     **OPT_IN_SECURITY_TOOL_OUTPUTS,
     **TERRAFORM_TOOL_OUTPUTS,
     **LANGUAGE_SARIF_TOOL_OUTPUTS,
+    **POLICY_TOOL_OUTPUTS,
     **LANGUAGE_CONVERTER_TOOL_OUTPUTS,
     **CONFIG_TOOL_OUTPUTS,
     **CI_SECURITY_TOOL_OUTPUTS,
@@ -664,6 +670,7 @@ class SigilixWorkflowContractTest(unittest.TestCase):
             **OPT_IN_SECURITY_TOOL_OUTPUTS,
             **TERRAFORM_TOOL_OUTPUTS,
             **LANGUAGE_SARIF_TOOL_OUTPUTS,
+            **POLICY_TOOL_OUTPUTS,
             **LANGUAGE_CONVERTER_TOOL_OUTPUTS,
             **CONFIG_TOOL_OUTPUTS,
             **CI_SECURITY_TOOL_OUTPUTS,

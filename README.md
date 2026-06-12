@@ -43,6 +43,7 @@ Current staged catalog:
 | Biome | on | Native SARIF with Sigilix metadata. Default-on Sigilix-controlled correctness linting for JS/TS and JSON; uses runner-owned config, bypasses caller ignore files, and skips common generated-output directories. |
 | Oxlint | on | Native SARIF with Sigilix metadata. Default-on Sigilix-controlled correctness linting for JavaScript and TypeScript; uses runner-owned config, disables caller Oxlint config and ignore files, skips common generated-output directories, and checks pinned npm package integrity before scanning. |
 | ast-grep | on | Native SARIF with Sigilix metadata. Default-on Sigilix-owned AST rules for high-confidence JavaScript and TypeScript async array logic bugs; verified npm tarballs are installed without package scripts before scanning. Caller ignore files are bypassed; common generated and vendor directories are still excluded. |
+| Regal | on | Native SARIF with Sigilix metadata. Default-on Rego policy linting with runner-owned bug/import rules; style, performance, testing, and migration-preference feedback is disabled. |
 | HTMLHint | on | Native SARIF with Sigilix metadata for HTML files. Uses runner-owned structural correctness rules, verifies the pinned npm tarball, and skips common generated-output directories. |
 | Stylelint | on | Converts Stylelint JSON output to SARIF for CSS files. Uses runner-owned correctness rules, verifies the pinned npm tarball, and skips common generated-output directories. |
 
@@ -56,6 +57,7 @@ Current staged catalog:
 > Set the matching boolean input to `false` in the caller workflow to suppress one of them.
 > `markdownlint`, `dotenv-linter`, and `checkmake` now default to `true`. Set the matching
 > boolean input to `false` in the caller workflow to suppress one of them.
+> `regal` now defaults to `true`. Set `regal: false` (boolean) in the caller workflow to suppress it.
 
 These SIG-107 slices move the runner toward broader third-party tool parity. The Sigilix
 metadata contract is currently attached to every listed tool.
@@ -96,7 +98,7 @@ a moving ref cannot prove which version of the runner ran.
 Default-on tool booleans: `semgrep`, `eslint`, `ruff`, `actionlint`, `shellcheck`, `yamllint`,
 `markdownlint`, `dotenv-linter`, `checkmake`, `gitleaks`, `osv-scanner`, `zizmor`, `hadolint`,
 `biome`, `oxlint`, `ast-grep`, `pylint`, `flake8`, `knip`, `golangci-lint`, `htmlhint`,
-`stylelint`, `tflint`, and `tsc`.
+`stylelint`, `tflint`, `regal`, and `tsc`.
 
 Default-off opt-in tool booleans: `checkov`, `trivy`, and `trufflehog`.
 

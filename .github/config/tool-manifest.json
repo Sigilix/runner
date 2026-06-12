@@ -106,6 +106,11 @@
       "output": "ast-grep.sarif"
     },
     {
+      "id": "regal",
+      "env": "REGAL_ENABLED",
+      "output": "regal.sarif"
+    },
+    {
       "id": "htmlhint",
       "env": "HTMLHINT_ENABLED",
       "output": "htmlhint.sarif"

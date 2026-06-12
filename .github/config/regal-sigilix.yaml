@@ -1,0 +1,23 @@
+rules:
+  imports:
+    use-rego-v1:
+      level: ignore
+    implicit-future-keywords:
+      level: ignore
+    import-after-rule:
+      level: ignore
+    prefer-package-imports:
+      level: ignore
+    redundant-alias:
+      level: ignore
+    redundant-data-import:
+      level: ignore
+ignore:
+  files:
+    - "**/.git/**"
+    - "**/node_modules/**"
+    - "**/dist/**"
+    - "**/build/**"
+    - "**/coverage/**"
+    - "**/vendor/**"
+    - "**/.terraform/**"
