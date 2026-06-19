@@ -977,6 +977,12 @@ class StampRuleClassesTest(unittest.TestCase):
         # A contrived ruleId hitting two patterns → exactly-one guard leaves it unset.
         self.assertIsNone(self._run("sql-injection-and-ssrf-combo"))
 
+    def test_secret_scanners_map_to_hardcoded_secret(self):
+        for tool in ("gitleaks", "trufflehog"):
+            run = {"tool": {"driver": {}}, "results": [{"ruleId": "aws-access-token", "properties": {}}]}
+            stamp_rule_classes(run, tool)
+            self.assertEqual(run["results"][0]["properties"]["sigilixRuleClass"], "hardcoded-secret")
+
     def test_unknown_tool_id_strips_only(self):
         run = {"tool": {"driver": {}}, "results": [{"ruleId": "dangerous-exec", "properties": {"sigilixRuleClass": "x"}}]}
         stamp_rule_classes(run, "eslint")  # no patterns for eslint → strip only
