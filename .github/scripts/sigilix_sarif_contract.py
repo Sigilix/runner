@@ -288,6 +288,13 @@ _RULE_CLASS_PATTERNS["opengrep"] = _RULE_CLASS_PATTERNS["semgrep"]
 # guard keeps this collision-safe.
 _RULE_CLASS_PATTERNS["gitleaks"] = [(re.compile(r".+"), "hardcoded-secret")]
 _RULE_CLASS_PATTERNS["trufflehog"] = [(re.compile(r".+"), "hardcoded-secret")]
+# Sigilix-owned ast-grep rules (deterministic floors re-run on the signed HEAD).
+# Rule ids embed the class token, e.g. `ts-eval-code-injection`. Logic rules
+# (await-for-each, async-array-predicate) match nothing → left unset.
+_RULE_CLASS_PATTERNS["ast-grep"] = [
+    (re.compile(r"(?<![a-z])eval"), "code-injection"),
+    (re.compile(r"exec-shell|shell-interpolation|command[-_.]?inj"), "command-injection"),
+]
 
 
 def stamp_rule_classes(run, tool_id):
