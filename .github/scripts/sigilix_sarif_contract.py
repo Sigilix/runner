@@ -282,6 +282,11 @@ _RULE_CLASS_PATTERNS = {
 }
 # OpenGrep runs the same rulesets as Semgrep → reuse the patterns.
 _RULE_CLASS_PATTERNS["opengrep"] = _RULE_CLASS_PATTERNS["semgrep"]
+# Dedicated secret scanners only ever report hardcoded secrets, so every result
+# maps to `hardcoded-secret` (`.+` = any non-empty ruleId). The exactly-one-class
+# guard keeps this collision-safe.
+_RULE_CLASS_PATTERNS["gitleaks"] = [(re.compile(r".+"), "hardcoded-secret")]
+_RULE_CLASS_PATTERNS["trufflehog"] = [(re.compile(r".+"), "hardcoded-secret")]
 
 
 def stamp_rule_classes(run, tool_id):
