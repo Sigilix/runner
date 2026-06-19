@@ -980,6 +980,16 @@ class StampRuleClassesTest(unittest.TestCase):
     def test_stamps_eval_code_injection(self):
         self.assertEqual(self._run("javascript.lang.security.detect-eval-with-expression"), "code-injection")
 
+    def test_ast_grep_eval_rule_maps_to_code_injection(self):
+        run = {"tool": {"driver": {}}, "results": [{"ruleId": "ts-eval-code-injection", "properties": {}}]}
+        stamp_rule_classes(run, "ast-grep")
+        self.assertEqual(run["results"][0]["properties"]["sigilixRuleClass"], "code-injection")
+
+    def test_ast_grep_logic_rule_left_unset(self):
+        run = {"tool": {"driver": {}}, "results": [{"ruleId": "ts-await-for-each-async-callback", "properties": {}}]}
+        stamp_rule_classes(run, "ast-grep")
+        self.assertNotIn("sigilixRuleClass", run["results"][0]["properties"])
+
     def test_secret_scanners_map_to_hardcoded_secret(self):
         for tool in ("gitleaks", "trufflehog"):
             run = {"tool": {"driver": {}}, "results": [{"ruleId": "aws-access-token", "properties": {}}]}

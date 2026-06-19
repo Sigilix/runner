@@ -1,0 +1,17 @@
+id: js-eval-code-injection
+valid:
+  - const x = JSON.parse(input);
+invalid:
+  - function run(userInput) { return eval(userInput); }
+---
+id: ts-eval-code-injection
+valid:
+  - "const x: unknown = JSON.parse(input);"
+invalid:
+  - "function run(userInput: string): unknown { return eval(userInput); }"
+---
+id: tsx-eval-code-injection
+valid:
+  - "function R({input}: Props) { return <div>{JSON.parse(input)}</div>; }"
+invalid:
+  - "function R({userInput}: Props) { return <div>{eval(userInput)}</div>; }"

@@ -1,0 +1,20 @@
+id: js-eval-code-injection
+language: JavaScript
+severity: error
+message: "Direct eval() call — runtime code execution from a value (code injection, CWE-94)."
+rule:
+  pattern: eval($$$ARGS)
+---
+id: ts-eval-code-injection
+language: TypeScript
+severity: error
+message: "Direct eval() call — runtime code execution from a value (code injection, CWE-94)."
+rule:
+  pattern: eval($$$ARGS)
+---
+id: tsx-eval-code-injection
+language: Tsx
+severity: error
+message: "Direct eval() call — runtime code execution from a value (code injection, CWE-94)."
+rule:
+  pattern: eval($$$ARGS)
