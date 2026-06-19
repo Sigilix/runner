@@ -268,6 +268,7 @@ def _sanitize_run_results(run):
 _RULE_CLASS_PATTERNS = {
     "semgrep": [
         (re.compile(r"dangerous-exec|command[-_.]?inj|os[-_.]?command|dangerous-subprocess|spawn.*shell"), "command-injection"),
+        (re.compile(r"detect-eval|eval-with-expression|(?<![a-z])eval"), "code-injection"),
         (re.compile(r"nosql[-_.]?inj"), "nosql-injection"),
         (re.compile(r"(?<![a-z])sql[-_.]?inj"), "sql-injection"),
         (re.compile(r"path[-_.]?travers|directory[-_.]?travers|zip[-_.]?slip"), "path-traversal"),
