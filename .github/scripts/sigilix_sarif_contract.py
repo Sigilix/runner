@@ -1,5 +1,6 @@
 import argparse
 import json
+import re
 import sys
 
 
@@ -253,6 +254,66 @@ def _sanitize_run_results(run):
     run["results"] = [result for result in results if isinstance(result, dict)]
 
 
+# SIG-184 Phase 3 — canonical vuln-class stamping. The engine's receipt-join
+# (verify-finding-receipt.ts) confirms a security finding into the VERIFIED tier
+# only when an independent runner scan flagged the SAME canonical class at the
+# same path/line. These class strings MUST match the engine's CanonicalVulnClass
+# enum (src/shared/domain/vuln-class.ts) VERBATIM — keep the two in lockstep.
+#
+# CREDIBILITY (Codex + DeepSeek sign-off): NOT loose substring matching. We map a
+# native tool ruleId to the set of classes whose anchored pattern matches; a
+# result is stamped ONLY when EXACTLY ONE distinct class matches. Zero or >1
+# matches → left UNSET (the engine treats absence as INCONCLUSIVE, never a false
+# VERIFIED). So an ambiguous/colliding ruleId is fail-safe, never mis-stamped.
+_RULE_CLASS_PATTERNS = {
+    "semgrep": [
+        (re.compile(r"dangerous-exec|command[-_.]?inj|os[-_.]?command|dangerous-subprocess|spawn.*shell"), "command-injection"),
+        (re.compile(r"nosql[-_.]?inj"), "nosql-injection"),
+        (re.compile(r"(?<![a-z])sql[-_.]?inj"), "sql-injection"),
+        (re.compile(r"path[-_.]?travers|directory[-_.]?travers|zip[-_.]?slip"), "path-traversal"),
+        (re.compile(r"(?<![a-z])ssrf|server[-_.]?side[-_.]?request"), "ssrf"),
+        (re.compile(r"(?<![a-z])xxe|xml[-_.]?external[-_.]?entit"), "xxe"),
+        (re.compile(r"(?<![a-z])ssti|template[-_.]?inj"), "ssti"),
+        (re.compile(r"proto(?:type)?[-_.]?pollution"), "proto-pollution"),
+        (re.compile(r"open[-_.]?redirect"), "open-redirect"),
+        (re.compile(r"hard[-_.]?coded|hardcoded"), "hardcoded-secret"),
+        (re.compile(r"insecure[-_.]?random|weak[-_.]?random|insecure.*prng"), "weak-random"),
+    ],
+}
+# OpenGrep runs the same rulesets as Semgrep → reuse the patterns.
+_RULE_CLASS_PATTERNS["opengrep"] = _RULE_CLASS_PATTERNS["semgrep"]
+
+
+def stamp_rule_classes(run, tool_id):
+    """Stamp per-result properties.sigilixRuleClass (collision-safe). Strips any
+    preexisting (untrusted) value first, then sets a class ONLY when exactly one
+    pattern-class matches the native ruleId. Mutates + returns ``run``."""
+    results = run.get("results")
+    if not isinstance(results, list):
+        return run
+    patterns = _RULE_CLASS_PATTERNS.get(tool_id)
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        props = result.get("properties")
+        # Always strip any preexisting class from raw tool output (untrusted).
+        if isinstance(props, dict):
+            props.pop("sigilixRuleClass", None)
+        if not patterns:
+            continue
+        rule_id = _result_rule_id(result)
+        if not rule_id:
+            continue
+        matched = {cls for (pattern, cls) in patterns if pattern.search(rule_id)}
+        if len(matched) != 1:
+            continue  # 0 or >1 → fail-safe: leave unset (engine → INCONCLUSIVE).
+        if not isinstance(props, dict):
+            props = {}
+            result["properties"] = props
+        props["sigilixRuleClass"] = next(iter(matched))
+    return run
+
+
 def _main(argv):
     parser = argparse.ArgumentParser(description="Attach Sigilix metadata to SARIF runs.")
     parser.add_argument("tool_id", choices=sorted(KNOWN_TOOL_IDS))
@@ -275,6 +336,9 @@ def _main(argv):
         if args.cap is not None:
             _, summary = cap_run_results(run, args.cap)
         attach_sigilix_metadata(run, args.tool_id, summary)
+        # SIG-184 Phase 3: stamp the canonical vuln-class on each final result,
+        # after capping/metadata (so it runs over the assembled output).
+        stamp_rule_classes(run, args.tool_id)
         normalized_runs.append(run)
     if args.ensure_run and not normalized_runs:
         normalized_runs.append(empty_metadata_run(args.tool_id))

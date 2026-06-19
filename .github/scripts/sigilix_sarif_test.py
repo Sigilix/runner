@@ -13,6 +13,7 @@ from sigilix_sarif_contract import (
     _main as contract_main,
     attach_sigilix_metadata,
     cap_results,
+    stamp_rule_classes,
 )
 from sigilix_sarif_merge import _main as sarif_merge_main
 from sigilix_sarif_merge import merge_sarif_documents
@@ -941,6 +942,45 @@ class ConverterTest(unittest.TestCase):
         self.assertEqual(normalize_path("../secret.txt", base_dir="/repo"), "secret.txt")
         self.assertEqual(normalize_path("sub/../../secret.txt", base_dir="/repo"), "secret.txt")
         self.assertEqual(normalize_path("", base_dir="/repo"), ".")
+
+
+class StampRuleClassesTest(unittest.TestCase):
+    """SIG-184 Phase 3 — canonical vuln-class stamping (credibility core)."""
+
+    @staticmethod
+    def _run(rule_id, props=None):
+        result = {"ruleId": rule_id}
+        if props is not None:
+            result["properties"] = props
+        run = {"tool": {"driver": {"name": "Semgrep"}}, "results": [result]}
+        stamp_rule_classes(run, "semgrep")
+        return run["results"][0].get("properties", {}).get("sigilixRuleClass")
+
+    def test_stamps_command_injection(self):
+        self.assertEqual(
+            self._run("javascript.lang.security.audit.dangerous-exec.dangerous-exec"),
+            "command-injection",
+        )
+
+    def test_stamps_sql_not_nosql(self):
+        self.assertEqual(self._run("python.lang.security.audit.sql-injection"), "sql-injection")
+        self.assertEqual(self._run("javascript.lang.security.nosql-injection"), "nosql-injection")
+
+    def test_unknown_rule_left_unset(self):
+        self.assertIsNone(self._run("javascript.lang.best-practice.no-console-log"))
+
+    def test_strips_preexisting_untrusted_class(self):
+        # A class smuggled in raw tool output must be removed, then re-derived.
+        self.assertIsNone(self._run("some.unmapped.rule", {"sigilixRuleClass": "command-injection"}))
+
+    def test_collision_safe_unset_when_two_classes_match(self):
+        # A contrived ruleId hitting two patterns → exactly-one guard leaves it unset.
+        self.assertIsNone(self._run("sql-injection-and-ssrf-combo"))
+
+    def test_unknown_tool_id_strips_only(self):
+        run = {"tool": {"driver": {}}, "results": [{"ruleId": "dangerous-exec", "properties": {"sigilixRuleClass": "x"}}]}
+        stamp_rule_classes(run, "eslint")  # no patterns for eslint → strip only
+        self.assertNotIn("sigilixRuleClass", run["results"][0]["properties"])
 
 
 if __name__ == "__main__":
