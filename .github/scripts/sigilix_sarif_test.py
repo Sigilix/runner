@@ -977,6 +977,9 @@ class StampRuleClassesTest(unittest.TestCase):
         # A contrived ruleId hitting two patterns → exactly-one guard leaves it unset.
         self.assertIsNone(self._run("sql-injection-and-ssrf-combo"))
 
+    def test_stamps_eval_code_injection(self):
+        self.assertEqual(self._run("javascript.lang.security.detect-eval-with-expression"), "code-injection")
+
     def test_secret_scanners_map_to_hardcoded_secret(self):
         for tool in ("gitleaks", "trufflehog"):
             run = {"tool": {"driver": {}}, "results": [{"ruleId": "aws-access-token", "properties": {}}]}
